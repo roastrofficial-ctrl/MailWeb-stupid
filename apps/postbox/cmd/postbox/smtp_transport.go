@@ -19,25 +19,31 @@ import (
 )
 
 type SMTPTransport struct {
-	SMTPAddress string
-	Publisher   string
-	MailpitURL  string
-	Timeout     time.Duration
-	PollEvery   time.Duration
-	Client      *http.Client
-	Status      io.Writer
+	SMTPAddress   string
+	Publisher     string
+	MailpitURL    string
+	Timeout       time.Duration
+	PollEvery     time.Duration
+	Client        *http.Client
+	Status        io.Writer
+	ClientMailbox string
 }
 
 func NewSMTPTransport(smtpAddress, publisher, mailpitURL string, timeout time.Duration, status io.Writer) *SMTPTransport {
 	return &SMTPTransport{
-		SMTPAddress: smtpAddress,
-		Publisher:   publisher,
-		MailpitURL:  strings.TrimRight(mailpitURL, "/"),
-		Timeout:     timeout,
-		PollEvery:   500 * time.Millisecond,
-		Client:      &http.Client{Timeout: 3 * time.Second},
-		Status:      status,
+		SMTPAddress:   smtpAddress,
+		Publisher:     publisher,
+		MailpitURL:    strings.TrimRight(mailpitURL, "/"),
+		Timeout:       timeout,
+		PollEvery:     500 * time.Millisecond,
+		Client:        &http.Client{Timeout: 3 * time.Second},
+		Status:        status,
+		ClientMailbox: "postbox-" + strings.ToLower(newID()) + "@client.local",
 	}
+}
+
+func (transport *SMTPTransport) Mailbox() string {
+	return transport.ClientMailbox
 }
 
 func (transport *SMTPTransport) Exchange(ctx context.Context, request MailWebRequest) (MailWebResponse, error) {
@@ -45,7 +51,7 @@ func (transport *SMTPTransport) Exchange(ctx context.Context, request MailWebReq
 	if err != nil {
 		return MailWebResponse{}, err
 	}
-	mailbox := "postbox-" + strings.ToLower(request.ID) + "@client.local"
+	mailbox := transport.ClientMailbox
 	message := buildMailMessage(mailbox, transport.Publisher, "MailWeb request "+request.ID, payload)
 	if err := smtp.SendMail(transport.SMTPAddress, nil, mailbox, []string{transport.Publisher}, message); err != nil {
 		return MailWebResponse{}, fmt.Errorf("send request through SMTP: %w", err)

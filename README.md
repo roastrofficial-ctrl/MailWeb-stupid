@@ -13,7 +13,7 @@ MailWeb messages are independent of their carrier. This repository now provides 
 
 ## Repository layout
 
-- `apps/postbox` — Go terminal client, local transport, protocol validator, and renderer
+- `apps/postbox` — Go graphical and terminal clients, transports, protocol validator, and renderers
 - `apps/demo-site` — Laravel document publisher
 - `packages/protocol` — protocol notes, JSON Schema, and examples
 - `packages/laravel-mailweb` — placeholder for a future Laravel integration package
@@ -23,13 +23,27 @@ MailWeb messages are independent of their carrier. This repository now provides 
 
 Docker and Docker Compose are the only host requirements.
 
+### Graphical Postbox
+
+Start the graphical browser with SMTP as its carrier:
+
+```bash
+./postbox-ui
+```
+
+Open <http://127.0.0.1:9847>, enter `mailweb://demo.local/`, and press **Send**. Every graphical navigation travels out and back through Mailpit. The browser includes back, forward, reload, safe structured document rendering, and a message inspector showing the exact request, response, timing, status, and transport.
+
+Set `MAILWEB_UI_TRANSPORT=http` when launching to use the direct development carrier instead.
+
+### Terminal Postbox
+
 Launch the terminal postbox with a MailWeb URI:
 
 ```bash
 ./postbox mailweb://demo.local/
 ```
 
-Enter `1` to follow the displayed link between `/` and `/about`, or `q` to quit. The launcher starts the Laravel publisher automatically. To inspect the publisher directly:
+Enter a displayed number to navigate between the demo documents, or `q` to quit. The launcher starts the Laravel publisher automatically. To inspect the publisher directly:
 
 ```bash
 curl -s http://localhost:8081/mailweb/messages \

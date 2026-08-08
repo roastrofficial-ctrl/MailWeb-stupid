@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Postbox</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <main class="browser-shell">
+        <header class="chrome">
+            <div class="topline">
+                <div class="brand"><span class="brand-mark">M</span><span>Postbox</span></div>
+                <div class="mailbox-badge">
+                    <span>YOUR PRIVATE MAILBOX</span>
+                    <strong id="client-mailbox">Assigning mailbox…</strong>
+                </div>
+            </div>
+            <nav class="controls" aria-label="Browser controls">
+                <button id="back" class="icon-button" type="button" aria-label="Back" title="Back">←</button>
+                <button id="forward" class="icon-button" type="button" aria-label="Forward" title="Forward">→</button>
+                <button id="reload" class="icon-button" type="button" aria-label="Reload" title="Reload">↻</button>
+                <form id="address-form" class="address-form">
+                    <span class="scheme-dot" aria-hidden="true"></span>
+                    <label class="visually-hidden" for="address">MailWeb address</label>
+                    <input id="address" value="mailweb://demo.local/" autocomplete="off" spellcheck="false">
+                    <button type="submit" class="go-button">Send</button>
+                </form>
+            </nav>
+            <div id="loading" class="loading" hidden><span></span> Waiting for <s>URL</s> new correspondence…</div>
+        </header>
+
+        <div id="error" class="error" role="alert" hidden></div>
+
+        <section class="workspace">
+            <article id="viewport" class="viewport" aria-live="polite">
+                <div class="empty-state">
+                    <p class="eyebrow">PRIVATE CORRESPONDENCE BROWSER</p>
+                    <h1>Where would you like to write?</h1>
+                    <p>Enter a <code>mailweb://</code> address above. Postbox will mail the publisher and wait for a reply.</p>
+                </div>
+            </article>
+
+            <aside class="debug-panel">
+                <details open>
+                    <summary>Message inspector</summary>
+                    <dl class="metadata">
+                        <div><dt>URI</dt><dd id="debug-uri">—</dd></div>
+                        <div><dt>Request ID</dt><dd id="debug-request-id">—</dd></div>
+                        <div><dt>Status</dt><dd id="debug-status">—</dd></div>
+                        <div><dt>Transport</dt><dd id="debug-transport">—</dd></div>
+                        <div><dt>Sent</dt><dd id="debug-sent">—</dd></div>
+                        <div><dt>Received</dt><dd id="debug-received">—</dd></div>
+                        <div><dt>Round trip</dt><dd id="debug-duration">—</dd></div>
+                    </dl>
+                    <h2>MailWebRequest</h2>
+                    <pre id="debug-request">No request sent yet.</pre>
+                    <h2>MailWebResponse</h2>
+                    <pre id="debug-response">No response received yet.</pre>
+                </details>
+            </aside>
+        </section>
+    </main>
+    <script src="/app.js" defer></script>
+</body>
+</html>

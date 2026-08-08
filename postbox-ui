@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+exec docker compose run --rm --build --service-ports postbox --ui --listen 0.0.0.0:9847 --transport "${MAILWEB_UI_TRANSPORT:-smtp}"

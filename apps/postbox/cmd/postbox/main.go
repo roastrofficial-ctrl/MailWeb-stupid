@@ -17,9 +17,11 @@ import (
 func main() {
 	transportName := flag.String("transport", envOr("MAILWEB_TRANSPORT", "http"), "transport to use: http or smtp")
 	timeout := flag.Duration("timeout", 15*time.Second, "how long to wait for a transport response")
+	webUI := flag.Bool("ui", false, "host the graphical Postbox browser")
+	listen := flag.String("listen", "127.0.0.1:9847", "loopback address for the graphical UI")
 	flag.Parse()
-	if flag.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: postbox [--transport http|smtp] mailweb://publisher/path")
+	if (!*webUI && flag.NArg() != 1) || (*webUI && flag.NArg() > 1) {
+		fmt.Fprintln(os.Stderr, "usage: postbox [--transport http|smtp] [--ui] [mailweb://publisher/path]")
 		os.Exit(2)
 	}
 	var transport Transport
@@ -38,6 +40,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "postbox: unknown transport %q\n", *transportName)
 		os.Exit(2)
 	}
+	if *webUI {
+		session := NewBrowserSession(transport, *transportName)
+		if flag.NArg() == 1 {
+			if _, err := session.Navigate(context.Background(), flag.Arg(0)); err != nil {
+				fmt.Fprintf(os.Stderr, "postbox: initial navigation failed: %v\n", err)
+			}
+		}
+		if err := RunWebUI(*listen, session); err != nil {
+			fmt.Fprintf(os.Stderr, "postbox: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := Browse(context.Background(), transport, flag.Arg(0), os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "postbox: %v\n", err)
 		os.Exit(1)
@@ -45,22 +60,15 @@ func main() {
 }
 
 func Browse(ctx context.Context, transport Transport, initialURI string, input io.Reader, output io.Writer) error {
-	currentURI := initialURI
+	session := NewBrowserSession(transport, "terminal")
 	scanner := bufio.NewScanner(input)
+	state, err := session.Navigate(ctx, initialURI)
 	for {
-		request, err := NewRequest(currentURI)
 		if err != nil {
-			return err
-		}
-		response, err := transport.Exchange(ctx, request)
-		if err != nil {
-			return fmt.Errorf("transport exchange: %w", err)
-		}
-		if err := ValidateResponse(request, response); err != nil {
-			return fmt.Errorf("invalid MailWebResponse: %w", err)
+			return fmt.Errorf("navigation failed: %w", err)
 		}
 
-		links := RenderTerminal(output, response)
+		links := RenderTerminal(output, state.Current.Response)
 		if len(links) == 0 {
 			return nil
 		}
@@ -80,10 +88,7 @@ func Browse(ctx context.Context, transport Transport, initialURI string, input i
 			fmt.Fprintln(output, "Please enter one of the displayed numbers.")
 			continue
 		}
-		currentURI, err = resolveMailWebReference(currentURI, links[index-1].Href)
-		if err != nil {
-			return err
-		}
+		state, err = session.NavigateReference(ctx, links[index-1].Href)
 		fmt.Fprintln(output)
 	}
 }

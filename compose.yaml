@@ -6,12 +6,15 @@ services:
     working_dir: /app
     volumes:
       - ./apps/postbox:/app
+    ports:
+      - "127.0.0.1:9847:9847"
     profiles: ["cli"]
     environment:
       MAILWEB_PUBLISHER_URL: http://demo-site:8000/mailweb/messages
       MAILWEB_SMTP_ADDRESS: mailpit:1025
       MAILWEB_MAILPIT_URL: http://mailpit:8025
       MAILWEB_PUBLISHER_MAILBOX: browse@demo.local
+      MAILWEB_CONTAINER_LISTEN: "true"
     depends_on:
       demo-site:
         condition: service_healthy
