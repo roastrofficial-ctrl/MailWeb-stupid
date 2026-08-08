@@ -1,6 +1,22 @@
 # MailWeb
 
-MailWeb is an experiment in transporting web-style documents as private messages instead of serving them directly as HTTP responses. A page still feels like a normal website to the person browsing it, but each navigation is represented internally by a request message and a response message.
+> **What if browsing the web was technically just checking your email?**
+
+MailWeb is a deliberately absurd experiment in transporting web-style documents as private messages instead of serving them directly as HTTP responses.
+
+It is **not an attempt to replace HTTP**, nor a claim that routing a website through email magically places it beyond regulation. Quite the opposite: MailWeb exists to explore — and gently make fun of — how blurry the boundaries between a "website", a "message", and a "protocol" become when you separate content from its transport.
+
+A page still feels like a normal website to the person browsing it. Underneath, however, every navigation is correspondence: the client sends a message requesting a document, the publisher replies with another message, and the client renders the response.
+
+Yes, this means the demo genuinely browses a website through email.
+
+Yes, this is ridiculous.
+
+**That's the point.**
+
+This repository proves complete static and dynamic round trips and deliberately keeps their machinery visible:
+
+![Postbox rendering the MailWeb homepage after receiving it through private email correspondence](docs/images/homepage.png)
 
 This repository proves complete static and dynamic round trips and deliberately keeps their machinery visible:
 
