@@ -76,6 +76,11 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .empty-state p, .mailweb-document p { max-width: 680px; font-family: var(--document-font); font-size: clamp(1.15rem, 2vw, 1.55rem); line-height: 1.55; }
 .mailweb-document { max-width: 850px; margin: 0 auto; animation: arrive .35s ease-out; }
 .mailweb-document .arrival-note { display: inline-block; margin: 0 0 2rem; padding: 7px 10px; border: 1px solid #c9b36f; border-radius: 4px; color: #6b5721; background: #fff7d9; font: 800 .68rem/1.35 "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; }
+.postal-state { margin: 0 0 3rem; padding: clamp(24px, 5vw, 46px); border: 1px solid #bd9f92; border-radius: var(--document-radius); background: #fff8ed; box-shadow: inset 8px 0 #9b382e; }
+.postal-state > strong { display: inline-block; padding: 8px 12px; border: 3px double #9b382e; color: #9b382e; font: 900 .78rem/1 "SFMono-Regular", Consolas, monospace; letter-spacing: .16em; transform: rotate(-2deg); }
+.postal-state h1 { margin: .55em 0 .2em; font-size: clamp(2.4rem, 6vw, 4.8rem); }
+.postal-state code { display: inline-block; margin-top: 14px; color: #765047; font-size: .72rem; }
+.transport-failure { max-width: 750px; margin: 5vh auto; }
 .mailweb-document h2 { margin-top: 1.7em; font-family: var(--document-font); font-size: 2.2rem; }
 @keyframes arrive { from { opacity: 0; transform: translateY(8px); } }
 .document-link, .document-button { border: 0; color: var(--document-accent); background: transparent; font-family: inherit; font-size: inherit; text-decoration: underline; text-underline-offset: 5px; }
@@ -112,6 +117,18 @@ figure img { display: block; max-width: 100%; border-radius: 10px; }
 dialog { border: 0; }
 dialog::backdrop { background: #101a147a; backdrop-filter: blur(3px); }
 .postbox-drawer, .correspondence-view { color: #25342a; background: #fffefa; box-shadow: 0 30px 100px #0006; }
+.journey-view { width: min(1100px, calc(100% - 28px)); max-height: calc(100% - 28px); padding: 28px; color: #d8e8da; background: #0b130e; border: 1px solid #496050; border-radius: 12px; box-shadow: 0 30px 100px #000a; }
+.journey-view header { display: flex; justify-content: space-between; } .journey-view h2 { margin: .15em 0; color: #f2c14e; font: 500 2.4rem/1 Georgia, serif; }
+.journey-kicker, .journey-truth { color: #8fa594; font: .7rem/1.5 "SFMono-Regular", Consolas, monospace; letter-spacing: .1em; }
+.journey-layout { display: grid; grid-template-columns: 260px 1fr; gap: 24px; margin-top: 24px; }
+.journey-history { display: grid; align-content: start; gap: 6px; max-height: 65vh; overflow: auto; }
+.journey-history button { padding: 10px; border: 1px solid #263b2c; color: #9eb0a1; background: #101c14; text-align: left; font: .7rem/1.4 "SFMono-Regular", Consolas, monospace; }
+.journey-history button.selected { border-color: #f2c14e; color: #f2c14e; }
+.journey-summary { padding: 12px; border: 1px solid #263b2c; background: #101c14; } .journey-summary p { margin: 3px; font: .72rem/1.4 "SFMono-Regular", Consolas, monospace; }
+.journey-events { padding: 0; list-style: none; } .journey-events li { display: grid; grid-template-columns: 90px 1fr; gap: 14px; padding: 13px 0; border-bottom: 1px solid #263b2c; transition: opacity .2s, transform .2s; }
+.journey-events li[hidden] { display: grid !important; opacity: 0; transform: translateY(6px); }
+.journey-events li > code { color: #f2c14e; } .journey-events li div { display: grid; gap: 4px; } .journey-events time, .journey-events small { color: #809184; font: .68rem/1.4 "SFMono-Regular", Consolas, monospace; }
+.journey-events details { margin-top: 8px; } #journey-instant { padding: 8px 11px; border: 1px solid #506b58; color: #cbe0ce; background: transparent; }
 .postbox-drawer { width: min(540px, 100%); height: 100%; max-height: none; margin: 0 0 0 auto; padding: 30px; border-left: 1px solid #718077; }
 .postbox-drawer header, .correspondence-view header { display: flex; align-items: flex-start; justify-content: space-between; }
 .postbox-drawer h2, .correspondence-view h2 { margin: .15em 0; font: 500 2.5rem/1 Georgia, serif; }
@@ -152,6 +169,7 @@ pre { max-height: 310px; margin: 0; padding: 13px; overflow: auto; border: 1px s
     .topline { align-items: flex-start; flex-direction: column; margin-bottom: 9px; }
 	.reader-tools { width: 100%; margin-left: 0; }
 	.correspondence-stage { grid-template-columns: 90px minmax(100px, 1fr) 90px; padding: 20px 14px; }
+	.journey-layout { grid-template-columns: 1fr; } .journey-history { max-height: 150px; }
     .mailbox-badge { width: 100%; }
     .browser-shell { width: 100%; min-height: 100vh; margin: 0; border: 0; border-radius: 0; }
 }

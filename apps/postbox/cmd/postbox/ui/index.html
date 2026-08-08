@@ -110,6 +110,7 @@
                     <h2>MailWebResponse</h2>
                     <pre id="debug-response">No response received yet.</pre>
 					<button id="correspondence-view-open" class="correspondence-view-button" type="button" disabled>View as correspondence</button>
+					<button id="journey-view-open" class="correspondence-view-button" type="button" disabled>Trace this journey</button>
                 </details>
             </aside>
         </section>
@@ -119,6 +120,11 @@
 		<header><div><p class="eyebrow">SESSION CORRESPONDENCE</p><h2>Your Postbox</h2></div><button class="dialog-close" type="button" data-close="postbox-drawer" aria-label="Close">×</button></header>
 		<p>Private replies already received and filed for this browsing session.</p>
 		<div id="postbox-items" class="postbox-items"></div>
+	</dialog>
+	<dialog id="journey-view" class="journey-view">
+		<header><div><p class="journey-kicker">POSTBOX OPERATIONS · OBSERVED EVENTS ONLY</p><h2>Journey Inspector</h2></div><button class="dialog-close" type="button" data-close="journey-view" aria-label="Close">×</button></header>
+		<p class="journey-truth">A session-only trace of what Postbox actually observed. Publisher internals are deliberately absent.</p>
+		<div class="journey-layout"><nav id="journey-history" class="journey-history" aria-label="Journey history"></nav><section><div id="journey-summary" class="journey-summary"></div><ol id="journey-events" class="journey-events"></ol><button id="journey-instant" type="button">Show instantly</button></section></div>
 	</dialog>
 
 	<dialog id="correspondence-view" class="correspondence-view">

@@ -34,17 +34,20 @@ func (transport *HTTPTransport) Exchange(ctx context.Context, message MailWebReq
 	if err != nil {
 		return MailWebResponse{}, err
 	}
+	observeJourney(ctx, "request.serialized", "MailWebRequest serialized as application/json", map[string]string{"bytes": jsonNumber(len(payload))})
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, transport.PublisherURL, bytes.NewReader(payload))
 	if err != nil {
 		return MailWebResponse{}, err
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
+	observeJourney(ctx, "transport.http.started", "direct carrier exchange started", map[string]string{"endpoint": transport.PublisherURL, "request_id": message.ID})
 
 	response, err := transport.Client.Do(request)
 	if err != nil {
 		return MailWebResponse{}, err
 	}
+	observeJourney(ctx, "transport.http.response", "direct carrier response received", map[string]string{"status": response.Status})
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))

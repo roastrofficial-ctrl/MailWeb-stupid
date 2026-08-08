@@ -141,10 +141,15 @@ It currently provides both graphical and terminal interfaces and is responsible 
 - navigation history
 - speculative correspondence
 - message inspection
+- session-only journey tracing
 
 The graphical Postbox deliberately exposes its machinery.
 
 Its Message Inspector shows the exact request, response, method, request body, timing, status, transport and delivery source behind the document currently being displayed.
+
+Its Journey Inspector pulls up the floorboards: a structured, timestamped trace of events Postbox actually observed, including archive checks, real SMTP acceptance, mailbox polling, response correlation, validation, prEmail filing and retrieval, POST submission with redacted values, and failures. It deliberately makes no claims about publisher internals it cannot observe.
+
+Unusual technical states also receive a restrained postal interpretation—such as `RETURN TO SENDER` for a real 404 or `NO REPLY` for a real transport timeout—while the Message Inspector always preserves the actual status and protocol evidence.
 
 The absurdity is part of the interface.
 
@@ -318,6 +323,8 @@ The graphical client includes:
 - visibly distinct retrieval of already-received letters
 - constrained publisher Presentation Intent with reader overrides
 - Correspondence View translating the real exchange into familiar letters
+- Journey Inspector with real event history and expandable protocol evidence
+- postal state treatments for returned, delayed, declined, damaged, and unavailable correspondence
 - full reduced-motion support
 
 Set:

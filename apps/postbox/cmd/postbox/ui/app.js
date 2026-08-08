@@ -1,6 +1,6 @@
 "use strict";
 
-const elements = Object.fromEntries(["address", "address-form", "back", "forward", "reload", "loading", "error", "viewport", "correspondence-stage", "travelling-envelope", "correspondence-status", "route-host", "route-mailbox", "postbox-open", "postbox-drawer", "postbox-items", "postbox-count", "correspondence-view-open", "correspondence-view", "email-request", "email-response"].map((id) => [id, document.getElementById(id)]));
+const elements = Object.fromEntries(["address", "address-form", "back", "forward", "reload", "loading", "error", "viewport", "correspondence-stage", "travelling-envelope", "correspondence-status", "route-host", "route-mailbox", "postbox-open", "postbox-drawer", "postbox-items", "postbox-count", "correspondence-view-open", "correspondence-view", "email-request", "email-response", "journey-view-open", "journey-view", "journey-history", "journey-summary", "journey-events", "journey-instant"].map((id) => [id, document.getElementById(id)]));
 let currentState = null;
 let appearanceMode = "correspondent";
 let knownArchive = new Set();
@@ -89,16 +89,43 @@ class CorrespondenceView {
 const animation = new CorrespondenceAnimation(elements["correspondence-stage"]);
 const presentation = new PresentationResolver();
 const postbox = new PostboxDrawer();
+class JourneyInspector {
+    constructor() { this.timers = []; this.selected = null; }
+    render(state, selectedID, instant = false) {
+        this.timers.forEach(clearTimeout); this.timers = [];
+        const journeys = state.journeys || [], selected = journeys.find((item) => item.id === selectedID) || state.last_journey;
+        if (!selected) return; this.selected = selected.id;
+        elements["journey-history"].replaceChildren();
+        for (const journey of [...journeys].reverse()) { const button = document.createElement("button"); button.type = "button"; button.className = journey.id === selected.id ? "selected" : ""; button.textContent = `${journey.method} ${safeURL(journey.uri)?.pathname || journey.uri} · ${journey.outcome}`; button.addEventListener("click", () => this.render(state, journey.id)); elements["journey-history"].appendChild(button); }
+        elements["journey-summary"].replaceChildren(...[`${selected.method} ${selected.uri}`, `${selected.transport} · ${selected.delivery}`, `${selected.outcome.toUpperCase()} · ${selected.round_trip_ms}ms`, selected.id].map((line) => { const p = document.createElement("p"); p.textContent = line; return p; }));
+        const original = selected.original_journey_id && journeys.find((item) => item.id === selected.original_journey_id);
+        const stream = original ? [...original.events.map((event) => ({event, owner: original})), {event: {type: "archive.interval", label: "… later: correspondence retrieved from Postbox", timestamp: selected.started_at}, owner: selected}, ...selected.events.map((event) => ({event, owner: selected}))] : selected.events.map((event) => ({event, owner: selected}));
+        elements["journey-events"].replaceChildren(); const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        stream.forEach(({event, owner}, index) => { const item = this.event(event, owner); item.hidden = !(instant || reduced); elements["journey-events"].appendChild(item); if (item.hidden) this.timers.push(setTimeout(() => { item.hidden = false; }, 90 * index)); });
+    }
+    event(event, journey) {
+        const item = document.createElement("li"), code = document.createElement("code"), body = document.createElement("div"), label = document.createElement("strong"), time = document.createElement("time");
+        code.textContent = (event.type.split(".")[0] || "event").toUpperCase(); label.textContent = event.label; time.textContent = formatTime(event.timestamp); body.append(label, time);
+        if (event.metadata) { const meta = document.createElement("small"); meta.textContent = Object.entries(event.metadata).map(([key, value]) => `${key}=${value}`).join(" · "); body.appendChild(meta); }
+        if (event.type === "request.created" && journey.request) body.appendChild(rawDetails("Actual MailWebRequest", journey.request));
+        if (event.type === "response.received" && journey.response) body.appendChild(rawDetails("Actual MailWebResponse", journey.response));
+        item.append(code, body); return item;
+    }
+}
+
 const correspondence = new CorrespondenceView();
+const journeyInspector = new JourneyInspector();
 
 elements["address-form"].addEventListener("submit", (event) => { event.preventDefault(); void navigate({uri: elements.address.value}); });
 elements.back.addEventListener("click", () => void action("/api/back", "live"));
 elements.forward.addEventListener("click", () => void action("/api/forward", "live"));
 elements.reload.addEventListener("click", () => void action("/api/reload", "live"));
 elements["postbox-open"].addEventListener("click", () => elements["postbox-drawer"].showModal());
+elements["journey-view-open"].addEventListener("click", () => { if (currentState?.last_journey) { journeyInspector.render(currentState); elements["journey-view"].showModal(); } });
+elements["journey-instant"].addEventListener("click", () => journeyInspector.render(currentState, journeyInspector.selected, true));
 elements["correspondence-view-open"].addEventListener("click", () => { if (currentState?.current) { correspondence.render(currentState.current); elements["correspondence-view"].showModal(); } });
 for (const button of document.querySelectorAll("[data-close]")) button.addEventListener("click", () => document.getElementById(button.dataset.close).close());
-for (const input of document.querySelectorAll('input[name="appearance"]')) input.addEventListener("change", () => { appearanceMode = input.value; if (currentState?.current) { presentation.apply(currentState.current.response.document, appearanceMode); renderDocument(currentState.current.response.document, currentState.current.uri, currentState.current.delivery); } });
+for (const input of document.querySelectorAll('input[name="appearance"]')) input.addEventListener("change", () => { appearanceMode = input.value; if (currentState?.current) { presentation.apply(currentState.current.response.document || {}, appearanceMode); renderDocument(currentState.current); } });
 
 async function navigate(payload) {
     let target = payload.uri || resolveReference(payload.reference);
@@ -112,11 +139,11 @@ async function requestState(endpoint, payload, kind, target) {
     try {
         const response = await fetch(endpoint, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Navigation failed");
+        if (!response.ok) { if (result.state) { currentState = result.state; elements["journey-view-open"].disabled = !result.state.last_journey; } throw new Error(result.error || "Navigation failed"); }
         await animation.finish(result.state.current);
         updateState(result.state);
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error); animation.fail(message.includes("timed out") ? "No private reply received." : "Correspondence could not be delivered."); showError(message);
+        const message = error instanceof Error ? error.message : String(error); animation.fail(message.includes("timed out") ? "No private reply received." : "Correspondence could not be delivered."); renderTransportFailure(target, message); showError(message);
     } finally { setLoading(false); }
 }
 
@@ -131,8 +158,9 @@ function updateState(state, backgroundOnly = false) {
     if (backgroundOnly) return;
     elements.back.disabled = !state.can_go_back; elements.forward.disabled = !state.can_go_forward; elements.reload.disabled = !state.current;
     if (!state.current) return;
-    elements.address.value = state.current.uri; presentation.apply(state.current.response.document, appearanceMode); renderDocument(state.current.response.document, state.current.uri, state.current.delivery); renderDebug(state.current);
+    elements.address.value = state.current.uri; presentation.apply(state.current.response.document || {}, appearanceMode); renderDocument(state.current); renderDebug(state.current);
     elements["correspondence-view-open"].disabled = false;
+	elements["journey-view-open"].disabled = !state.last_journey;
 }
 
 function renderPremailLetters(targets) {
@@ -140,10 +168,12 @@ function renderPremailLetters(targets) {
 	for (const target of targets) { const chip = document.createElement("span"), uri = safeURL(target); chip.textContent = `letter → ${uri?.pathname || target}`; area.appendChild(chip); }
 }
 
-function renderDocument(mailwebDocument, currentURI, delivery) {
+function renderDocument(current) {
+    const mailwebDocument = current.response.document || {title: "No enclosure", body: []}, currentURI = current.uri, delivery = current.delivery;
     elements.viewport.replaceChildren(); document.title = `${mailwebDocument.title} — Postbox`;
     const page = document.createElement("div"); page.className = "mailweb-document";
 	const arrival = document.createElement("p"); arrival.className = "arrival-note"; arrival.textContent = delivery !== "live" ? "PRIVATE EMAIL ALREADY RECEIVED — RETRIEVED FROM YOUR POSTBOX" : "PRIVATE EMAIL RECEIVED — UNSEALED AND RENDERED BY POSTBOX"; page.appendChild(arrival);
+    const postal = postalState(current); if (postal) page.appendChild(renderPostalState(postal, current));
     for (const node of mailwebDocument.body) page.appendChild(renderNode(node, currentURI));
     elements.viewport.appendChild(page);
 }
@@ -165,10 +195,23 @@ function requestEmail(current) {
     return {subject: `MailWeb correspondence: ${uri.pathname}`, from: current.client_mailbox || "Postbox", to: current.publisher_mailbox || uri.host, timeLabel: "Sent", time: formatTime(current.request_sent_at), lines, attachmentLabel: current.request.method === "POST" ? "Enclosed data · form-data.mailweb.json" : "Actual MailWebRequest JSON", raw: current.request};
 }
 function responseEmail(current) {
-    const uri = new URL(current.uri), counts = {}; for (const node of current.response.document.body) counts[node.type] = (counts[node.type] || 0) + 1;
+    const uri = new URL(current.uri), document = current.response.document || {title: "No enclosure", body: []}, counts = {}; for (const node of document.body) counts[node.type] = (counts[node.type] || 0) + 1;
     const inventory = Object.entries(counts).map(([type, count]) => `${count} ${type}${count === 1 ? "" : "s"}`).join(" · ");
-    return {subject: `Re: MailWeb correspondence: ${uri.pathname}`, from: current.publisher_mailbox || uri.host, to: current.client_mailbox || "Postbox", timeLabel: "Received", time: formatTime(current.response_received_at), lines: ["Dear Postbox,", "Certainly. Please find the requested semantic document enclosed:", `“${current.response.document.title}”`, `Status: ${current.response.status} · Protocol: MailWeb ${current.response.mailweb}`, inventory, "Yours,", uri.host], attachmentLabel: "Enclosed document · document.mailweb.json", raw: current.response};
+    return {subject: `Re: MailWeb correspondence: ${uri.pathname}`, from: current.publisher_mailbox || uri.host, to: current.client_mailbox || "Postbox", timeLabel: "Received", time: formatTime(current.response_received_at), lines: ["Dear Postbox,", current.response.document ? "Certainly. Please find the requested semantic document enclosed:" : "Your message was received without a document enclosure.", `“${document.title}”`, `Status: ${current.response.status} · Protocol: MailWeb ${current.response.mailweb}`, inventory, "Yours,", uri.host], attachmentLabel: "Enclosed document · document.mailweb.json", raw: current.response};
 }
+
+
+function postalState(current) {
+    const status = current.response.status;
+    const states = {201: ["RECEIVED", "Correspondence acted upon", "Your correspondence has been received and acted upon."], 202: ["ACCEPTED", "Correspondence accepted", "The request is being processed; this does not mean it is complete."], 204: ["NO ENCLOSURE", "No reply enclosed", "Your correspondent received the message, but enclosed no document."], 400: ["UNREADABLE", "Your letter could not be understood", "The correspondent could not interpret this request."], 401: ["IDENTIFICATION REQUIRED", "Correspondence withheld", "Identification is required before this correspondence can be released."], 403: ["DECLINED", "Correspondence declined", "Your correspondent declined to provide this document."], 404: ["RETURN TO SENDER", "Address unknown", `The requested correspondence could not be found at ${current.uri}`], 409: ["CONFLICT", "Already on file", "Your correspondence conflicts with something already on file."], 429: ["TOO MUCH CORRESPONDENCE", "Please try again shortly", "Your correspondent has asked for a short break before receiving more post."]};
+    if (states[status]) return states[status];
+    if (status >= 500) return ["WE REGRET TO INFORM YOU", status === 502 || status === 503 ? "Correspondent temporarily unavailable" : "Reply could not be prepared", "Your correspondent was unable to prepare a reply."];
+    if (status >= 300 && status < 400) return ["FORWARDING", "Forwarding address received", "The technical response is preserved below; automatic forwarding is not invented."];
+    return null;
+}
+function renderPostalState(postal, current) { const card = document.createElement("section"), stamp = document.createElement("strong"), title = document.createElement("h1"), copy = document.createElement("p"), technical = document.createElement("code"); card.className = `postal-state status-${current.response.status}`; stamp.textContent = postal[0]; title.textContent = postal[1]; copy.textContent = postal[2]; technical.textContent = `MAILWEB STATUS ${current.response.status}`; card.append(stamp, title, copy, technical); return card; }
+function renderTransportFailure(uri, message) { const timeout = message.toLowerCase().includes("timed out"), card = document.createElement("section"), stamp = document.createElement("strong"), title = document.createElement("h1"), copy = document.createElement("p"), retry = document.createElement("button"); card.className = "postal-state transport-failure"; stamp.textContent = timeout ? "NO REPLY" : "DAMAGED"; title.textContent = timeout ? "No correspondence received" : "This correspondence arrived damaged"; copy.textContent = timeout ? `We wrote to ${safeURL(uri)?.host || "the correspondent"}, but no correlated reply arrived before the real transport timeout.` : "Postbox could not transport, decode, or validate the correspondence. The technical error is shown below."; retry.type = "button"; retry.className = "document-button"; retry.textContent = "Send again"; retry.addEventListener("click", () => void navigate({uri})); card.append(stamp, title, copy, retry); elements.viewport.replaceChildren(card); }
+function rawDetails(label, value) { const details = document.createElement("details"), summary = document.createElement("summary"), pre = document.createElement("pre"); summary.textContent = label; pre.textContent = JSON.stringify(value, null, 2); details.append(summary, pre); return details; }
 
 function postalOutcome(current) {
 	const status = current.response.status;

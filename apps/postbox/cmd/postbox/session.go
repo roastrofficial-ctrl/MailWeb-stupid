@@ -14,6 +14,7 @@ import (
 const defaultCacheTTL = 60 * time.Second
 
 type NavigationResult struct {
+	JourneyID          string          `json:"journey_id"`
 	URI                string          `json:"uri"`
 	Request            MailWebRequest  `json:"request"`
 	Response           MailWebResponse `json:"response"`
@@ -47,6 +48,8 @@ type BrowserState struct {
 	Prefetch          PrefetchState     `json:"premail"`
 	Notice            string            `json:"notice,omitempty"`
 	Archive           []ArchiveItem     `json:"archive"`
+	Journeys          []Journey         `json:"journeys"`
+	LastJourney       *Journey          `json:"last_journey,omitempty"`
 }
 
 type ArchiveItem struct {
@@ -80,6 +83,7 @@ type BrowserSession struct {
 	prefetch         PrefetchState
 	lastNotice       string
 	prefetchEnabled  bool
+	journeys         []Journey
 }
 
 func NewBrowserSession(transport Transport, transportName string) *BrowserSession {
@@ -224,17 +228,29 @@ func (session *BrowserSession) navigate(ctx context.Context, method, uri string,
 		return session.Snapshot(), err
 	}
 	started := time.Now()
+	journey := newJourney(canonical, method, session.transportName)
+	journey.add("cache.checked", "Postbox checked for existing correspondence", map[string]string{"bypass": jsonBool(bypass)})
+	if method == "POST" {
+		journey.add("form.collected", "form enclosed for private delivery", map[string]string{"fields": jsonNumber(len(body)), "values": "redacted"})
+	}
 	var result NavigationResult
 	if method == "GET" && !bypass {
 		result, _ = session.awaitCached(ctx, canonical)
 	}
 	if result.Request.ID == "" {
-		result, err = session.exchange(ctx, method, canonical, body)
+		journey.add("cache.miss", "no current correspondence found", nil)
+		result, err = session.exchange(ctx, method, canonical, body, journey)
 		if err != nil {
+			journey.add("navigation.error", "correspondence failed", map[string]string{"error": safeJourneyError(err)})
+			completed := journey.finish(journeyOutcome(err, 0), "live correspondence", nil, nil, time.Since(started).Milliseconds(), time.Since(started).Milliseconds())
+			session.storeJourney(completed)
 			return session.Snapshot(), err
 		}
 		result.NavigationMS = time.Since(started).Milliseconds()
 	} else {
+		originalJourney := result.JourneyID
+		journey.add("cache.hit", "correspondence found in Postbox", map[string]string{"original_journey_id": originalJourney})
+		journey.journey.OriginalJourney = originalJourney
 		if result.PrefetchedAt != nil {
 			result.Delivery = "prEmail cache"
 		} else {
@@ -243,6 +259,10 @@ func (session *BrowserSession) navigate(ctx context.Context, method, uri string,
 		result.OpenedAt = time.Now().UTC()
 		result.NavigationMS = time.Since(started).Milliseconds()
 	}
+	journey.add("document.ready", "semantic document released to renderer", nil)
+	completed := journey.finish(journeyOutcome(nil, result.Response.Status), result.Delivery, &result.Request, &result.Response, result.RoundTripMS, result.NavigationMS)
+	result.JourneyID = completed.ID
+	session.storeJourney(completed)
 	session.mu.Lock()
 	if method == "GET" && result.Response.Status >= 200 && result.Response.Status < 300 && result.Delivery == "live" {
 		now := time.Now().UTC()
@@ -267,20 +287,24 @@ func (session *BrowserSession) navigate(ctx context.Context, method, uri string,
 	return state, nil
 }
 
-func (session *BrowserSession) exchange(ctx context.Context, method, uri string, body map[string]any) (NavigationResult, error) {
+func (session *BrowserSession) exchange(ctx context.Context, method, uri string, body map[string]any, journey *journeyRecorder) (NavigationResult, error) {
 	request, err := NewRequestWithBody(method, uri, body)
 	if err != nil {
 		return NavigationResult{}, err
 	}
+	journey.add("request.created", "MailWebRequest created", map[string]string{"request_id": request.ID, "protocol": request.MailWeb})
 	sent := time.Now().UTC()
-	response, err := session.transport.Exchange(ctx, request)
+	response, err := session.transport.Exchange(withJourneyObserver(ctx, journey), request)
 	received := time.Now().UTC()
 	if err != nil {
 		return NavigationResult{}, err
 	}
+	journey.add("response.received", "correlated MailWebResponse received", map[string]string{"request_id": response.RequestID, "status": jsonNumber(response.Status)})
+	journey.add("response.correlated", "response request_id matched outgoing correspondence", map[string]string{"request_id": response.RequestID})
 	if err := ValidateResponse(request, response); err != nil {
 		return NavigationResult{}, err
 	}
+	journey.add("response.validated", "protocol and correlation validated", nil)
 	return NavigationResult{
 		URI: uri, Request: request, Response: response, Transport: session.transportName, Delivery: "live",
 		RequestSentAt: sent, ResponseReceivedAt: received, RoundTripMS: received.Sub(sent).Milliseconds(),
@@ -375,13 +399,25 @@ func (session *BrowserSession) discover(current NavigationResult) {
 func (session *BrowserSession) prefetchURI(uri string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	result, err := session.exchange(ctx, "GET", uri, nil)
+	journey := newJourney(uri, "GET", session.transportName)
+	journey.journey.Delivery = "prEmail"
+	journey.add("premail.requested", "likely destination mailed in advance", nil)
+	result, err := session.exchange(ctx, "GET", uri, nil, journey)
 	now := time.Now().UTC()
 	session.mu.Lock()
 	if err == nil && result.Response.Status >= 200 && result.Response.Status < 300 {
+		journey.add("premail.received", "reply filed unopened in Postbox", nil)
+		completed := journey.finish("filed", "prEmail", &result.Request, &result.Response, result.RoundTripMS, result.RoundTripMS)
+		result.JourneyID = completed.ID
+		session.journeys = appendCappedJourney(session.journeys, completed)
 		result.PrefetchedAt = &now
 		session.cache[uri] = cacheEntry{result: result, fetchedAt: now, expiresAt: now.Add(session.cacheTTL)}
 		session.prefetch.Completed++
+	}
+	if err != nil {
+		journey.add("navigation.error", "prEmail correspondence failed", map[string]string{"error": safeJourneyError(err)})
+		completed := journey.finish(journeyOutcome(err, 0), "prEmail", nil, nil, 0, 0)
+		session.journeys = appendCappedJourney(session.journeys, completed)
 	}
 	if wait, ok := session.inflight[uri]; ok {
 		close(wait)
@@ -441,6 +477,7 @@ func plural(count int, one, many string) string {
 	return jsonNumber(count) + " " + word
 }
 func jsonNumber(value int) string { encoded, _ := json.Marshal(value); return string(encoded) }
+func jsonBool(value bool) string { encoded, _ := json.Marshal(value); return string(encoded) }
 
 func canonicalMailWebURI(raw string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
@@ -465,6 +502,11 @@ func (session *BrowserSession) stateLocked() BrowserState {
 		current := session.history[session.index]
 		state.Current = &current
 	}
+	state.Journeys = append([]Journey(nil), session.journeys...)
+	if len(state.Journeys) > 0 {
+		last := state.Journeys[len(state.Journeys)-1]
+		state.LastJourney = &last
+	}
 	seen := map[string]bool{}
 	if state.Current != nil {
 		state.Archive = append(state.Archive, archiveItem(*state.Current, true))
@@ -477,6 +519,34 @@ func (session *BrowserSession) stateLocked() BrowserState {
 	}
 	sort.Slice(state.Archive, func(i, j int) bool { return state.Archive[i].ReceivedAt.After(state.Archive[j].ReceivedAt) })
 	return state
+}
+
+func (session *BrowserSession) storeJourney(journey Journey) {
+	session.mu.Lock()
+	session.journeys = appendCappedJourney(session.journeys, journey)
+	session.mu.Unlock()
+}
+
+func appendCappedJourney(journeys []Journey, journey Journey) []Journey {
+	journeys = append(journeys, journey)
+	if len(journeys) > 50 { journeys = journeys[len(journeys)-50:] }
+	return journeys
+}
+
+func journeyOutcome(err error, status int) string {
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "timed out") { return "timeout" }
+		return "damaged"
+	}
+	if status >= 200 && status < 300 { return "delivered" }
+	if status == 404 { return "returned" }
+	if status >= 500 { return "publisher error" }
+	return "response received"
+}
+
+func safeJourneyError(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "timed out") { return "timeout waiting for correlated response" }
+	return err.Error()
 }
 
 func archiveItem(result NavigationResult, current bool) ArchiveItem {

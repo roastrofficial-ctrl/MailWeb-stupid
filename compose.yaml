@@ -4,6 +4,7 @@ services:
       context: ./apps/postbox
       target: development
     working_dir: /app
+    command: ["--transport", "smtp", "--ui", "--listen", "0.0.0.0:9847"]
     volumes:
       - ./apps/postbox:/app
     ports:

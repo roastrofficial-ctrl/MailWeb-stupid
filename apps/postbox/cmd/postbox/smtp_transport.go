@@ -53,11 +53,13 @@ func (transport *SMTPTransport) Exchange(ctx context.Context, request MailWebReq
 	if err != nil {
 		return MailWebResponse{}, err
 	}
+	observeJourney(ctx, "request.serialized", "MailWebRequest serialized as application/mailweb+json", map[string]string{"bytes": jsonNumber(len(payload))})
 	mailbox := transport.ClientMailbox
 	message := buildMailMessage(mailbox, transport.Publisher, "MailWeb request "+request.ID, payload)
 	if err := smtp.SendMail(transport.SMTPAddress, nil, mailbox, []string{transport.Publisher}, message); err != nil {
 		return MailWebResponse{}, fmt.Errorf("send request through SMTP: %w", err)
 	}
+	observeJourney(ctx, "transport.smtp.sent", "SMTP correspondence accepted for delivery", map[string]string{"from": mailbox, "to": transport.Publisher, "request_id": request.ID})
 	if transport.Status != nil {
 		fmt.Fprintln(transport.Status, "Waiting for the publisher to reply...")
 	}
@@ -65,6 +67,7 @@ func (transport *SMTPTransport) Exchange(ctx context.Context, request MailWebReq
 	waitCtx, cancel := context.WithTimeout(ctx, transport.Timeout)
 	defer cancel()
 	ticker := time.NewTicker(transport.PollEvery)
+	observeJourney(ctx, "mailbox.polling", "polling private mailbox for correlated reply", map[string]string{"mailbox": mailbox})
 	defer ticker.Stop()
 	for {
 		response, found, err := transport.findResponse(waitCtx, mailbox, request.ID)
@@ -75,6 +78,7 @@ func (transport *SMTPTransport) Exchange(ctx context.Context, request MailWebReq
 			return MailWebResponse{}, err
 		}
 		if found {
+			observeJourney(ctx, "mailbox.response_detected", "correlated correspondence detected", map[string]string{"request_id": request.ID})
 			return response, nil
 		}
 		select {

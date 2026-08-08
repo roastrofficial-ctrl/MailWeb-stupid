@@ -274,14 +274,57 @@ func TestExhibitUIKeepsPresentationAndCorrespondenceLocal(t *testing.T) {
 	markup, _ := fs.ReadFile(assets, "index.html")
 	styles, _ := fs.ReadFile(assets, "styles.css")
 	combined := string(script) + string(markup) + string(styles)
-	for _, required := range []string{"CorrespondenceAnimation", "PresentationResolver", "PostboxDrawer", "CorrespondenceView", "requestEmail", "responseEmail", "prefers-reduced-motion"} {
+	for _, required := range []string{"CorrespondenceAnimation", "PresentationResolver", "PostboxDrawer", "CorrespondenceView", "JourneyInspector", "postalState", "requestEmail", "responseEmail", "prefers-reduced-motion"} {
 		if !strings.Contains(combined, required) {
 			t.Fatalf("exhibit UI missing %s", required)
 		}
 	}
-	if !strings.Contains(string(script), `presentation.apply(currentState.current.response.document, appearanceMode)`) {
+	if !strings.Contains(string(script), `presentation.apply(currentState.current.response.document || {}, appearanceMode)`) {
 		t.Fatal("appearance changes do not locally re-resolve presentation")
 	}
+}
+
+func TestJourneyRecordsTruthfulOrderedNavigationEvents(t *testing.T) {
+	session := NewBrowserSession(&fakeTransport{}, "test")
+	session.DisablePrefetch()
+	state, err := session.Navigate(context.Background(), "mailweb://demo.local/")
+	if err != nil || state.LastJourney == nil {
+		t.Fatalf("journey missing: %#v, %v", state.LastJourney, err)
+	}
+	want := []string{"navigation.started", "cache.checked", "cache.miss", "request.created", "response.received", "response.correlated", "response.validated", "document.ready"}
+	if len(state.LastJourney.Events) != len(want) {
+		t.Fatalf("unexpected events: %#v", state.LastJourney.Events)
+	}
+	for index, event := range state.LastJourney.Events {
+		if event.Type != want[index] { t.Fatalf("event %d: got %s, want %s", index, event.Type, want[index]) }
+		if index > 0 && event.Timestamp.Before(state.LastJourney.Events[index-1].Timestamp) { t.Fatal("journey timestamps are not monotonic") }
+	}
+	if state.Current.JourneyID != state.LastJourney.ID || state.LastJourney.Request.ID != state.Current.Request.ID || state.LastJourney.Outcome != "delivered" {
+		t.Fatalf("journey does not correlate with navigation: %#v", state.LastJourney)
+	}
+}
+
+func TestJourneyCacheRetrievalLinksOriginalCorrespondence(t *testing.T) {
+	session := NewBrowserSession(&fakeTransport{}, "test")
+	session.DisablePrefetch()
+	first, _ := session.Navigate(context.Background(), "mailweb://demo.local/")
+	second, _ := session.Navigate(context.Background(), "mailweb://demo.local/")
+	if second.LastJourney.OriginalJourney != first.Current.JourneyID || second.Current.Delivery != "correspondence archive" {
+		t.Fatalf("archive journey lost provenance: %#v", second.LastJourney)
+	}
+	foundHit := false
+	for _, event := range second.LastJourney.Events { if event.Type == "cache.hit" { foundHit = true } }
+	if !foundHit { t.Fatal("cache retrieval was not recorded") }
+}
+
+func TestPOSTJourneyRedactsSubmittedValues(t *testing.T) {
+	session := NewBrowserSession(&fakeTransport{}, "test")
+	session.DisablePrefetch()
+	_, _ = session.Navigate(context.Background(), "mailweb://demo.local/")
+	state, err := session.SubmitForm(context.Background(), "POST", "/", map[string]string{"secret": "never-log-me"})
+	if err != nil { t.Fatal(err) }
+	encoded := prettyJSON(state.LastJourney.Events)
+	if strings.Contains(encoded, "never-log-me") || !strings.Contains(encoded, `"values": "redacted"`) { t.Fatalf("unsafe journey metadata: %s", encoded) }
 }
 
 func requestCount(transport *fakeTransport) int {
