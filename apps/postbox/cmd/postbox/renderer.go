@@ -17,6 +17,10 @@ func RenderTerminal(writer io.Writer, response MailWebResponse) []Navigation {
 	fmt.Fprintln(writer)
 
 	var navigation []Navigation
+	enclosures := map[string]Enclosure{}
+	for _, enclosure := range response.Enclosures {
+		enclosures[enclosure.Digest] = enclosure
+	}
 	for _, node := range response.Document.Body {
 		switch node.Type {
 		case "heading":
@@ -41,6 +45,9 @@ func RenderTerminal(writer io.Writer, response MailWebResponse) []Navigation {
 				alt = "Image"
 			}
 			fmt.Fprintf(writer, "[%s]\n\n", alt)
+		case "attachment":
+			file := enclosures[node.Digest]
+			fmt.Fprintf(writer, "[Attachment: %s · %s · %d bytes]\n\n", file.Filename, file.MediaType, file.Size)
 		}
 	}
 	return navigation

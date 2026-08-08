@@ -5,6 +5,7 @@ namespace MailWeb\Laravel;
 use MailWeb\Laravel\Documents\Page;
 use MailWeb\Laravel\Documents\TextField;
 use MailWeb\Laravel\Documents\Template;
+use MailWeb\Laravel\Documents\Enclosure;
 use MailWeb\Laravel\Routing\MailWebRoute;
 use MailWeb\Laravel\Routing\MailWebRouter;
 
@@ -40,4 +41,6 @@ final class MailWebManager
 		if (! isset($this->templates[$id])) { throw new \InvalidArgumentException("Unknown MailWeb template {$id}."); }
 		return $this->templates[$id];
 	}
+
+	public function enclosure(string $path, string $id, ?string $filename = null): Enclosure { return new Enclosure($id, $path, $filename); }
 }

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["mailweb", "request_id", "status", "document"],
   "properties": {
-    "mailweb": { "const": "0.4" },
+    "mailweb": { "const": "0.5" },
     "request_id": {
       "type": "string",
       "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
@@ -14,6 +14,17 @@
     },
     "status": { "type": "integer", "minimum": 100, "maximum": 599 },
     "document": { "$ref": "mailweb-document.schema.json" },
+    "enclosures": {
+      "type": "array", "maxItems": 16,
+      "items": { "type": "object", "additionalProperties": false, "required": ["id", "filename", "media_type", "size", "digest"], "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$" },
+        "filename": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[^/\\\\]+$" },
+        "media_type": { "enum": ["image/png", "image/jpeg", "image/webp", "application/pdf", "text/plain"] },
+        "size": { "type": "integer", "minimum": 0, "maximum": 2097152 },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "content": { "type": "string", "contentEncoding": "base64" }
+      } }
+    },
     "templates": {
       "type": "array", "maxItems": 16,
       "items": { "type": "object", "additionalProperties": false, "required": ["id", "version", "document"], "properties": {

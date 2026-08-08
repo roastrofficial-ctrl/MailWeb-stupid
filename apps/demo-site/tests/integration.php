@@ -16,7 +16,7 @@ $assert = function (bool $condition, string $message) use (&$assertions): void {
 };
 $publisher = app(Publisher::class);
 $request = fn (string $id, string $method, string $uri, ?array $body = null) => array_filter([
-    'mailweb' => '0.4', 'id' => $id, 'method' => $method, 'uri' => $uri,
+    'mailweb' => '0.5', 'id' => $id, 'method' => $method, 'uri' => $uri,
     'headers' => $method === 'POST' ? ['content-type' => 'application/json'] : [], 'body' => $body,
 ], fn (mixed $value, string $key) => ! ($key === 'body' && $value === null), ARRAY_FILTER_USE_BOTH);
 
@@ -28,6 +28,14 @@ $legacyHomeRequest['mailweb'] = '0.2';
 $legacyHome = $publisher->handle($legacyHomeRequest);
 $assert(! isset($legacyHome['document']['presentation']) && ! isset($legacyHome['document']['body'][0]['variant']), 'Presentation was not safely downgraded for MailWeb 0.2.');
 $assert($home['document']['template'] === 'dear-internet/site' && isset($home['templates'][0]), 'Home did not deliver stationery.');
+$assert(count($home['enclosures']) === 2 && isset($home['enclosures'][0]['content']), 'Home did not enclose its real image and manifesto bytes.');
+$hero = array_values(array_filter($home['enclosures'], fn (array $item) => $item['id'] === 'correspondenceHero'))[0];
+$assert($hero['media_type'] === 'image/png' && $hero['size'] === strlen(base64_decode($hero['content'], true)) && $hero['digest'] === 'sha256:'.hash('sha256', base64_decode($hero['content'], true)), 'Automatic enclosure metadata is incorrect.');
+$knownHomeRequest = $request('01J00000000000000000000014', 'GET', 'mailweb://demo.local/about');
+$knownHomeRequest['headers']['mailweb-known-resources'] = json_encode([$hero['digest']]);
+$knownAbout = $publisher->handle($knownHomeRequest);
+$reusedHero = array_values(array_filter($knownAbout['enclosures'], fn (array $item) => $item['id'] === 'correspondenceHero'))[0];
+$assert(! isset($reusedHero['content']) && $reusedHero['digest'] === $hero['digest'], 'Known enclosure bytes were retransmitted.');
 
 $form = $publisher->handle($request('01J00000000000000000000011', 'GET', 'mailweb://demo.local/hello'));
 $formNodes = array_values(array_filter($form['document']['slots']['content'], fn (array $node) => $node['type'] === 'form'));

@@ -41,11 +41,26 @@ func RunWebUI(listenAddress string, session *BrowserSession) error {
 	mux.HandleFunc("POST /api/back", server.back)
 	mux.HandleFunc("POST /api/forward", server.forward)
 	mux.HandleFunc("POST /api/reload", server.reload)
+	mux.HandleFunc("GET /api/enclosures/{digest}", server.enclosure)
 	mux.Handle("GET /", http.FileServerFS(assets))
 
 	handler := securityHeaders(mux)
 	log.Printf("Postbox UI listening on http://%s", listenAddress)
 	return http.ListenAndServe(listenAddress, handler)
+}
+
+func (server *uiServer) enclosure(writer http.ResponseWriter, request *http.Request) {
+	digest := "sha256:" + request.PathValue("digest")
+	file, ok := server.session.Enclosure(digest)
+	if !ok {
+		http.NotFound(writer, request)
+		return
+	}
+	writer.Header().Set("Content-Type", file.MediaType)
+	writer.Header().Set("Content-Length", fmt.Sprint(len(file.Content)))
+	writer.Header().Set("Content-Disposition", `inline; filename="`+strings.ReplaceAll(file.Filename, `"`, "")+`"`)
+	writer.Header().Set("Cache-Control", "private, max-age=3600")
+	_, _ = writer.Write(file.Content)
 }
 
 func (server *uiServer) submitForm(writer http.ResponseWriter, request *http.Request) {

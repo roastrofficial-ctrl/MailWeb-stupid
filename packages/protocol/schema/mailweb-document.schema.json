@@ -32,13 +32,14 @@
         { "$ref": "#/$defs/button" },
         { "$ref": "#/$defs/form" },
         { "$ref": "#/$defs/nav" },
-        { "$ref": "#/$defs/slot" }
+        { "$ref": "#/$defs/slot" },
+        { "$ref": "#/$defs/attachment" }
       ]
     },
     "contentNode": {
       "oneOf": [
         { "$ref": "#/$defs/heading" }, { "$ref": "#/$defs/paragraph" }, { "$ref": "#/$defs/link" },
-        { "$ref": "#/$defs/image" }, { "$ref": "#/$defs/button" }, { "$ref": "#/$defs/form" }, { "$ref": "#/$defs/nav" }
+        { "$ref": "#/$defs/image" }, { "$ref": "#/$defs/button" }, { "$ref": "#/$defs/form" }, { "$ref": "#/$defs/nav" }, { "$ref": "#/$defs/attachment" }
       ]
     },
     "navItem": { "type": "object", "additionalProperties": false, "required": ["label", "href"], "properties": { "label": { "type": "string", "minLength": 1 }, "href": { "type": "string", "format": "uri-reference", "minLength": 1 } } },
@@ -86,14 +87,18 @@
     "image": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "src", "alt"],
+      "required": ["type", "alt"],
       "properties": {
         "type": { "const": "image" },
         "src": { "type": "string", "format": "uri-reference", "minLength": 1 },
+        "enclosure": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$" },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "alt": { "type": "string" },
         "variant": { "enum": ["normal", "hero"] }
-      }
+      },
+      "oneOf": [{ "required": ["src"], "not": { "required": ["enclosure"] } }, { "required": ["enclosure", "digest"], "not": { "required": ["src"] } }]
     },
+    "attachment": { "type": "object", "additionalProperties": false, "required": ["type", "enclosure", "digest", "label"], "properties": { "type": { "const": "attachment" }, "enclosure": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$" }, "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }, "label": { "type": "string", "minLength": 1 }, "description": { "type": "string" } } },
     "button": {
       "type": "object",
       "additionalProperties": false,

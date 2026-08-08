@@ -24,7 +24,7 @@ final readonly class ProtocolCodec
         }
         try {
             $validated = $this->validator->make($message, [
-                'mailweb' => ['required', 'in:0.1,0.2,0.3,0.4'],
+                'mailweb' => ['required', 'in:0.1,0.2,0.3,0.4,0.5'],
                 'id' => ['required', 'string', 'regex:/^[0-9A-HJKMNP-TV-Z]{26}$/'],
                 'method' => ['required', 'in:GET,POST'],
                 'uri' => ['required', 'string', 'starts_with:mailweb://', 'max:2048'],
@@ -60,15 +60,19 @@ final readonly class ProtocolCodec
     public function response(MailWebRequest $request, Page $page): array
     {
 		$document = $page->jsonSerialize();
-		if ($request->version() !== '0.4' && $page->templateDefinition() !== null) { $document = $page->composedDocument(); }
-		if ($request->version() === '0.4' && ($template = $page->templateDefinition()) !== null) {
+		if (! in_array($request->version(), ['0.4', '0.5'], true) && $page->templateDefinition() !== null) { $document = $page->composedDocument(); }
+		if (in_array($request->version(), ['0.4', '0.5'], true) && ($template = $page->templateDefinition()) !== null) {
 			$known = json_decode((string) $request->header('mailweb-stationery', '{}'), true);
 			if (! is_array($known) || ($known[$template->id] ?? null) !== $template->version) { $templates = [$template->jsonSerialize()]; }
 		}
-		if (! in_array($request->version(), ['0.3', '0.4'], true)) {
+		if (! in_array($request->version(), ['0.3', '0.4', '0.5'], true)) {
 			unset($document['presentation']);
 			foreach ($document['body'] as &$node) { unset($node['variant']); }
 			unset($node);
+		}
+		if ($request->version() === '0.5') {
+			$knownResources = json_decode((string) $request->header('mailweb-known-resources', '[]'), true); if (! is_array($knownResources)) { $knownResources = []; }
+			foreach ($page->enclosures() as $enclosure) { $serialized = $enclosure->jsonSerialize(); if (in_array($enclosure->digest, array_slice($knownResources, 0, 64), true)) { unset($serialized['content']); } $enclosures[] = $serialized; }
 		}
         return [
             'mailweb' => $request->version(),
@@ -76,6 +80,7 @@ final readonly class ProtocolCodec
             'status' => $page->status,
 			'document' => $document,
 			...isset($templates) ? ['templates' => $templates] : [],
+			...isset($enclosures) && $enclosures !== [] ? ['enclosures' => $enclosures] : [],
         ];
     }
 }

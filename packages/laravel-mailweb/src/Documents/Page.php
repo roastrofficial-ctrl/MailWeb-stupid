@@ -14,6 +14,8 @@ final class Page implements JsonSerializable
 	private ?Template $template = null;
 	/** @var array<string, array<int, array<string, mixed>>> */
 	private array $slots = [];
+	/** @var array<string, Enclosure> */
+	private array $enclosures = [];
 
     public function __construct(public readonly string $title, public readonly int $status = 200)
     {
@@ -63,6 +65,7 @@ final class Page implements JsonSerializable
 	{
 		if (! preg_match('/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/', $name)) { throw new InvalidArgumentException('Invalid slot name.'); }
 		$serialized = $nodes instanceof Page ? $nodes->body() : $nodes;
+		if ($nodes instanceof Page) { foreach ($nodes->enclosures() as $enclosure) { $this->enclosures[$enclosure->digest] = $enclosure; } }
 		$this->slots[$name] = $serialized;
 		return $this;
 	}
@@ -70,6 +73,8 @@ final class Page implements JsonSerializable
 	/** @return array<int, array<string, mixed>> */
 	public function body(): array { return $this->body; }
 	public function templateDefinition(): ?Template { return $this->template; }
+	/** @return array<int, Enclosure> */
+	public function enclosures(): array { $all = $this->enclosures; if ($this->template !== null) { foreach ($this->template->document->enclosures() as $enclosure) { $all[$enclosure->digest] = $enclosure; } } return array_values($all); }
 	/** @return array<string, mixed> */
 	public function composedDocument(): array
 	{
@@ -87,11 +92,18 @@ final class Page implements JsonSerializable
 		return $this->node(array_filter(['type' => 'button', 'label' => $label, 'href' => $href, 'variant' => $variant === 'normal' ? null : $variant]));
     }
 
-    public function image(string $src, string $alt, string $variant = 'normal'): self
+    public function image(string|Enclosure $src, string $alt, string $variant = 'normal'): self
     {
 		if (! in_array($variant, ['normal', 'hero'], true)) { throw new InvalidArgumentException('Invalid image variant.'); }
+		if ($src instanceof Enclosure) { $this->enclosures[$src->digest] = $src; return $this->node(array_filter(['type' => 'image', 'enclosure' => $src->id, 'digest' => $src->digest, 'alt' => $alt, 'variant' => $variant === 'normal' ? null : $variant])); }
         return $this->node(array_filter(['type' => 'image', 'src' => $src, 'alt' => $alt, 'variant' => $variant === 'normal' ? null : $variant]));
     }
+
+	public function attachment(Enclosure $enclosure, string $label, string $description = ''): self
+	{
+		$this->enclosures[$enclosure->digest] = $enclosure;
+		return $this->node(array_filter(['type' => 'attachment', 'enclosure' => $enclosure->id, 'digest' => $enclosure->digest, 'label' => $label, 'description' => $description]));
+	}
 
 	public function presentation(string $accent, string $background, string $foreground, string $surface, string $typeface = 'system', string $density = 'comfortable', string $corners = 'soft'): self
 	{

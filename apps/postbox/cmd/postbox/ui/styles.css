@@ -101,6 +101,8 @@ figure { margin: 2rem 0; }
 figure img { display: block; max-width: 100%; border-radius: 10px; }
 .image-placeholder { display: grid; min-height: 180px; place-items: center; border: 1px dashed #8b978d; border-radius: 10px; color: #5c685f; background: #eef1eb; }
 .hero-image img, .hero-image .image-placeholder { width: 100%; min-height: 300px; object-fit: cover; border-radius: var(--document-radius); }
+.attachment-card { display: grid; max-width: 620px; gap: 7px; margin: 2rem 0; padding: 18px 20px; border: 1px solid color-mix(in srgb, var(--document-accent) 35%, transparent); border-radius: var(--document-radius); background: var(--document-surface); }
+.attachment-card p { margin: 0; font-size: .9rem; }.attachment-card a,.stationery-item a { color: var(--document-accent, #315c45); font-weight: 800; text-decoration: underline; text-underline-offset: 4px; }
 
 .correspondence-stage { position: fixed; z-index: 20; left: 50%; top: 50%; display: grid; grid-template-columns: 150px minmax(180px, 420px) 150px; align-items: center; width: min(850px, calc(100% - 36px)); padding: 28px; border: 1px solid #6d796f; border-radius: 16px; color: #edf2ed; background: #17251cf2; box-shadow: 0 30px 100px #101a1477; transform: translate(-50%, -50%); }
 .route-party { display: grid; gap: 4px; font-size: .75rem; letter-spacing: .06em; }

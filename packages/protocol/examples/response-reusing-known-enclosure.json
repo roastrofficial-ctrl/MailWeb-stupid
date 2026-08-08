@@ -1,0 +1,5 @@
+{
+  "mailweb": "0.5", "request_id": "01J00000000000000000000001", "status": 200,
+  "enclosures": [{"id": "hero", "filename": "hero.png", "media_type": "image/png", "size": 68, "digest": "sha256:431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460"}],
+  "document": {"title": "Reused image", "body": [{"type": "image", "enclosure": "hero", "digest": "sha256:431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460", "alt": "Loaded from the Postbox archive"}]}
+}

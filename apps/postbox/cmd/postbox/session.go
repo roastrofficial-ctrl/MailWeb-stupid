@@ -20,6 +20,9 @@ type NavigationResult struct {
 	Response           MailWebResponse  `json:"response"`
 	RawResponse        *MailWebResponse `json:"raw_response,omitempty"`
 	StationeryStatus   string           `json:"stationery_status,omitempty"`
+	EnclosuresReceived int              `json:"enclosures_received"`
+	EnclosuresReused   int              `json:"enclosures_reused"`
+	EnclosureBytes     int64            `json:"enclosure_bytes"`
 	Transport          string           `json:"transport"`
 	Delivery           string           `json:"delivery"`
 	RequestSentAt      time.Time        `json:"request_sent_at"`
@@ -53,6 +56,7 @@ type BrowserState struct {
 	Journeys               []Journey         `json:"journeys"`
 	LastJourney            *Journey          `json:"last_journey,omitempty"`
 	Stationery             []StationeryFile  `json:"stationery"`
+	Enclosures             []EnclosureFile   `json:"enclosures"`
 	RetainedCorrespondence *MailWebResponse  `json:"retained_correspondence,omitempty"`
 }
 
@@ -89,6 +93,7 @@ type BrowserSession struct {
 	prefetchEnabled        bool
 	journeys               []Journey
 	stationery             map[string]StationeryFile
+	enclosures             map[string]EnclosureFile
 	retainedCorrespondence *MailWebResponse
 }
 
@@ -106,6 +111,7 @@ func NewBrowserSession(transport Transport, transportName string) *BrowserSessio
 		cache: map[string]cacheEntry{}, inflight: map[string]chan struct{}{}, cacheTTL: defaultCacheTTL,
 		prefetchEnabled: true,
 		stationery:      map[string]StationeryFile{},
+		enclosures:      map[string]EnclosureFile{},
 		prefetch:        PrefetchState{Phase: "idle", Message: "prEmail: waiting for addresses."},
 	}
 }
@@ -308,10 +314,22 @@ func (session *BrowserSession) exchange(ctx context.Context, method, uri string,
 	for _, file := range session.stationery {
 		known[file.ID] = file.Version
 	}
+	knownResources := make([]string, 0, len(session.enclosures))
+	for digest := range session.enclosures {
+		knownResources = append(knownResources, digest)
+	}
 	session.mu.Unlock()
 	if len(known) > 0 {
 		encoded, _ := json.Marshal(known)
 		request.Headers["mailweb-stationery"] = string(encoded)
+	}
+	sort.Strings(knownResources)
+	if len(knownResources) > 64 {
+		knownResources = knownResources[len(knownResources)-64:]
+	}
+	if len(knownResources) > 0 {
+		encoded, _ := json.Marshal(knownResources)
+		request.Headers["mailweb-known-resources"] = string(encoded)
 	}
 	journey.add("request.created", "MailWebRequest created", map[string]string{"request_id": request.ID, "protocol": request.MailWeb})
 	sent := time.Now().UTC()
@@ -326,6 +344,31 @@ func (session *BrowserSession) exchange(ctx context.Context, method, uri string,
 		return NavigationResult{}, err
 	}
 	journey.add("response.validated", "protocol and correlation validated", nil)
+	receivedEnclosures, reusedEnclosures := 0, 0
+	var enclosureBytes int64
+	for _, enclosure := range response.Enclosures {
+		enclosureBytes += enclosure.Size
+		if len(enclosure.Content) > 0 {
+			receivedEnclosures++
+		} else {
+			reusedEnclosures++
+		}
+	}
+	retainedResponse := response
+	retainedResponse.Enclosures = append([]Enclosure(nil), response.Enclosures...)
+	for index := range retainedResponse.Enclosures {
+		retainedResponse.Enclosures[index].Content = nil
+	}
+	response, err = session.prepareEnclosures(response, uri, journey)
+	if err != nil {
+		if isMissingEnclosure(err) {
+			session.mu.Lock()
+			retained := retainedResponse
+			session.retainedCorrespondence = &retained
+			session.mu.Unlock()
+		}
+		return NavigationResult{}, err
+	}
 	rawResponse := response
 	response, err = session.prepareResponse(response, uri, journey)
 	if err != nil {
@@ -347,7 +390,7 @@ func (session *BrowserSession) exchange(ctx context.Context, method, uri string,
 		}
 	}
 	return NavigationResult{
-		URI: uri, Request: request, Response: response, RawResponse: &rawResponse, StationeryStatus: stationeryStatus, Transport: session.transportName, Delivery: "live",
+		URI: uri, Request: request, Response: response, RawResponse: &rawResponse, StationeryStatus: stationeryStatus, EnclosuresReceived: receivedEnclosures, EnclosuresReused: reusedEnclosures, EnclosureBytes: enclosureBytes, Transport: session.transportName, Delivery: "live",
 		RequestSentAt: sent, ResponseReceivedAt: received, RoundTripMS: received.Sub(sent).Milliseconds(),
 		OpenedAt: received, NavigationMS: received.Sub(sent).Milliseconds(), ClientMailbox: session.clientMailbox,
 		PublisherMailbox: session.publisherMailbox,
@@ -562,8 +605,12 @@ func (session *BrowserSession) stateLocked() BrowserState {
 	for _, file := range session.stationery {
 		state.Stationery = append(state.Stationery, file)
 	}
+	for _, file := range session.enclosures {
+		state.Enclosures = append(state.Enclosures, file)
+	}
 	state.RetainedCorrespondence = session.retainedCorrespondence
 	sort.Slice(state.Stationery, func(i, j int) bool { return state.Stationery[i].ReceivedAt.After(state.Stationery[j].ReceivedAt) })
+	sort.Slice(state.Enclosures, func(i, j int) bool { return state.Enclosures[i].ReceivedAt.After(state.Enclosures[j].ReceivedAt) })
 	seen := map[string]bool{}
 	if state.Current != nil {
 		state.Archive = append(state.Archive, archiveItem(*state.Current, true))

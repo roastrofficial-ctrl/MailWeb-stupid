@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"mime/multipart"
 	"mime/quotedprintable"
 	"net/http"
 	"net/mail"
@@ -152,7 +153,7 @@ func (transport *SMTPTransport) rawMessage(ctx context.Context, id string) ([]by
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch Mailpit message: status %d", response.StatusCode)
 	}
-	return io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	return io.ReadAll(io.LimitReader(response.Body, 7<<20))
 }
 
 func buildMailMessage(from, to, subject string, payload []byte) []byte {
@@ -172,8 +173,14 @@ func parseMailWebResponse(raw []byte) (MailWebResponse, error) {
 	if err != nil {
 		return MailWebResponse{}, fmt.Errorf("parse response email: %w", err)
 	}
-	mediaType, _, err := mime.ParseMediaType(message.Header.Get("Content-Type"))
-	if err != nil || !strings.EqualFold(mediaType, "application/mailweb+json") {
+	mediaType, params, err := mime.ParseMediaType(message.Header.Get("Content-Type"))
+	if err != nil {
+		return MailWebResponse{}, fmt.Errorf("response has content type %q, want application/mailweb+json", mediaType)
+	}
+	if strings.EqualFold(mediaType, "multipart/mixed") {
+		return parseMultipartMailWebResponse(message, params["boundary"])
+	}
+	if !strings.EqualFold(mediaType, "application/mailweb+json") {
 		return MailWebResponse{}, fmt.Errorf("response has content type %q, want application/mailweb+json", mediaType)
 	}
 	var body io.Reader = message.Body
@@ -193,4 +200,77 @@ func parseMailWebResponse(raw []byte) (MailWebResponse, error) {
 		return MailWebResponse{}, fmt.Errorf("decode application/mailweb+json response: %w", err)
 	}
 	return response, nil
+}
+
+func parseMultipartMailWebResponse(message *mail.Message, boundary string) (MailWebResponse, error) {
+	if boundary == "" {
+		return MailWebResponse{}, errors.New("multipart MailWeb response has no boundary")
+	}
+	reader := multipart.NewReader(message.Body, boundary)
+	var response MailWebResponse
+	foundJSON := false
+	parts := map[string][]byte{}
+	for count := 0; ; count++ {
+		if count > 16 {
+			return MailWebResponse{}, errors.New("too many MIME enclosure parts")
+		}
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return MailWebResponse{}, fmt.Errorf("parse MIME enclosure: %w", err)
+		}
+		mediaType, _, _ := mime.ParseMediaType(part.Header.Get("Content-Type"))
+		body, err := readTransferDecoded(part, 3<<20)
+		if err != nil {
+			return MailWebResponse{}, err
+		}
+		if mediaType == "application/mailweb+json" {
+			if foundJSON {
+				return MailWebResponse{}, errors.New("duplicate MailWeb JSON MIME part")
+			}
+			if err := json.Unmarshal(body, &response); err != nil {
+				return MailWebResponse{}, err
+			}
+			foundJSON = true
+			continue
+		}
+		id := strings.Trim(part.Header.Get("Content-ID"), "<>")
+		if id == "" || parts[id] != nil {
+			return MailWebResponse{}, errors.New("invalid or duplicate enclosure Content-ID")
+		}
+		parts[id] = body
+	}
+	if !foundJSON {
+		return MailWebResponse{}, errors.New("multipart response lacks MailWeb JSON part")
+	}
+	for index := range response.Enclosures {
+		if body, ok := parts[response.Enclosures[index].ID]; ok {
+			response.Enclosures[index].Content = body
+			delete(parts, response.Enclosures[index].ID)
+		}
+	}
+	if len(parts) != 0 {
+		return MailWebResponse{}, errors.New("unreferenced MIME enclosure part")
+	}
+	return response, nil
+}
+
+func readTransferDecoded(part *multipart.Part, limit int64) ([]byte, error) {
+	var reader io.Reader = part
+	switch strings.ToLower(part.Header.Get("Content-Transfer-Encoding")) {
+	case "base64":
+		reader = base64.NewDecoder(base64.StdEncoding, part)
+	case "quoted-printable":
+		reader = quotedprintable.NewReader(part)
+	}
+	body, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > limit {
+		return nil, errors.New("MIME enclosure exceeds size limit")
+	}
+	return body, nil
 }

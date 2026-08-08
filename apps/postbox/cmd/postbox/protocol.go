@@ -27,11 +27,21 @@ type MailWebRequest struct {
 }
 
 type MailWebResponse struct {
-	MailWeb   string               `json:"mailweb"`
-	RequestID string               `json:"request_id"`
-	Status    int                  `json:"status"`
-	Document  *MailWebDocument     `json:"document"`
-	Templates []TemplateDefinition `json:"templates,omitempty"`
+	MailWeb    string               `json:"mailweb"`
+	RequestID  string               `json:"request_id"`
+	Status     int                  `json:"status"`
+	Document   *MailWebDocument     `json:"document"`
+	Templates  []TemplateDefinition `json:"templates,omitempty"`
+	Enclosures []Enclosure          `json:"enclosures,omitempty"`
+}
+
+type Enclosure struct {
+	ID        string `json:"id"`
+	Filename  string `json:"filename"`
+	MediaType string `json:"media_type"`
+	Size      int64  `json:"size"`
+	Digest    string `json:"digest"`
+	Content   []byte `json:"content,omitempty"`
 }
 
 type MailWebDocument struct {
@@ -60,20 +70,23 @@ type Presentation struct {
 }
 
 type Node struct {
-	Type    string      `json:"type"`
-	Level   int         `json:"level,omitempty"`
-	Text    string      `json:"text,omitempty"`
-	Label   string      `json:"label,omitempty"`
-	Href    string      `json:"href,omitempty"`
-	Src     string      `json:"src,omitempty"`
-	Alt     string      `json:"alt,omitempty"`
-	Method  string      `json:"method,omitempty"`
-	Action  string      `json:"action,omitempty"`
-	Fields  []FormField `json:"fields,omitempty"`
-	Submit  string      `json:"submit,omitempty"`
-	Variant string      `json:"variant,omitempty"`
-	Name    string      `json:"name,omitempty"`
-	Items   []NavItem   `json:"items,omitempty"`
+	Type        string      `json:"type"`
+	Level       int         `json:"level,omitempty"`
+	Text        string      `json:"text,omitempty"`
+	Label       string      `json:"label,omitempty"`
+	Href        string      `json:"href,omitempty"`
+	Src         string      `json:"src,omitempty"`
+	Alt         string      `json:"alt,omitempty"`
+	Method      string      `json:"method,omitempty"`
+	Action      string      `json:"action,omitempty"`
+	Fields      []FormField `json:"fields,omitempty"`
+	Submit      string      `json:"submit,omitempty"`
+	Variant     string      `json:"variant,omitempty"`
+	Name        string      `json:"name,omitempty"`
+	Items       []NavItem   `json:"items,omitempty"`
+	Enclosure   string      `json:"enclosure,omitempty"`
+	Digest      string      `json:"digest,omitempty"`
+	Description string      `json:"description,omitempty"`
 }
 
 type NavItem struct {
@@ -100,7 +113,7 @@ func NewRequestWithBody(method, uri string, body map[string]any) (MailWebRequest
 	}
 	method = strings.ToUpper(method)
 	if method != "GET" && method != "POST" {
-		return MailWebRequest{}, errors.New("MailWeb 0.4 supports GET and POST only")
+		return MailWebRequest{}, errors.New("MailWeb 0.5 supports GET and POST only")
 	}
 	if method == "GET" && body != nil {
 		return MailWebRequest{}, errors.New("GET requests must not contain a body")
@@ -113,7 +126,7 @@ func NewRequestWithBody(method, uri string, body map[string]any) (MailWebRequest
 		}
 	}
 	return MailWebRequest{
-		MailWeb: "0.4",
+		MailWeb: "0.5",
 		ID:      newID(),
 		Method:  method,
 		URI:     parsed.String(),
@@ -123,7 +136,7 @@ func NewRequestWithBody(method, uri string, body map[string]any) (MailWebRequest
 }
 
 func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
-	if response.MailWeb != request.MailWeb || (response.MailWeb != "0.1" && response.MailWeb != "0.2" && response.MailWeb != "0.3" && response.MailWeb != "0.4") {
+	if response.MailWeb != request.MailWeb || (response.MailWeb != "0.1" && response.MailWeb != "0.2" && response.MailWeb != "0.3" && response.MailWeb != "0.4" && response.MailWeb != "0.5") {
 		return fmt.Errorf("unsupported MailWeb version %q", response.MailWeb)
 	}
 	if response.RequestID != request.ID {
@@ -135,7 +148,7 @@ func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
 	if response.Document == nil {
 		return errors.New("response document is required")
 	}
-	if len(response.Document.Title) > 512 || len(response.Document.Body) > 10000 || len(response.Templates) > 16 {
+	if len(response.Document.Title) > 512 || len(response.Document.Body) > 10000 || len(response.Templates) > 16 || len(response.Enclosures) > 16 {
 		return errors.New("document exceeds protocol limits")
 	}
 	if response.Document.Presentation != nil {
@@ -151,7 +164,7 @@ func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
 			return fmt.Errorf("document body node %d: form requires MailWeb 0.2 or later", index)
 		}
 		if response.MailWeb != "0.3" && node.Variant != "" {
-			if response.MailWeb != "0.4" {
+			if response.MailWeb != "0.4" && response.MailWeb != "0.5" {
 				return fmt.Errorf("document body node %d: variants require MailWeb 0.3", index)
 			}
 		}
@@ -163,7 +176,7 @@ func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
 		}
 	}
 	if response.Document.Template != "" {
-		if response.MailWeb != "0.4" || !templateIdentity.MatchString(response.Document.Template) || !validTemplateVersion(response.Document.TemplateVersion) || len(response.Document.Slots) > 64 || len(response.Document.Body) != 0 {
+		if (response.MailWeb != "0.4" && response.MailWeb != "0.5") || !templateIdentity.MatchString(response.Document.Template) || !validTemplateVersion(response.Document.TemplateVersion) || len(response.Document.Slots) > 64 || len(response.Document.Body) != 0 {
 			return errors.New("invalid template document reference")
 		}
 		for name, nodes := range response.Document.Slots {
@@ -179,11 +192,11 @@ func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
 				}
 			}
 		}
-	} else if response.MailWeb == "0.4" && (response.Document.TemplateVersion != "" || len(response.Document.Slots) != 0) {
+	} else if (response.MailWeb == "0.4" || response.MailWeb == "0.5") && (response.Document.TemplateVersion != "" || len(response.Document.Slots) != 0) {
 		return errors.New("template fields require template")
 	}
 	for _, template := range response.Templates {
-		if response.MailWeb != "0.4" || !templateIdentity.MatchString(template.ID) || !validTemplateVersion(template.Version) || template.Document.Template != "" {
+		if (response.MailWeb != "0.4" && response.MailWeb != "0.5") || !templateIdentity.MatchString(template.ID) || !validTemplateVersion(template.Version) || template.Document.Template != "" {
 			return errors.New("invalid template definition")
 		}
 		if err := validateTemplateDocument(template.Document); err != nil {
@@ -193,7 +206,70 @@ func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
 			return errors.New("template version does not match its content")
 		}
 	}
+	if response.MailWeb != "0.5" && len(response.Enclosures) != 0 {
+		return errors.New("enclosures require MailWeb 0.5")
+	}
+	byID := map[string]Enclosure{}
+	total := int64(0)
+	for _, enclosure := range response.Enclosures {
+		if !formFieldName.MatchString(enclosure.ID) || enclosure.Filename == "" || strings.Contains(enclosure.Filename, "/") || strings.Contains(enclosure.Filename, "\\") || strings.ContainsRune(enclosure.Filename, '\x00') || !supportedMediaType(enclosure.MediaType) || enclosure.Size < 0 || enclosure.Size > 2<<20 || !validTemplateVersion(enclosure.Digest) {
+			return errors.New("invalid enclosure metadata")
+		}
+		if _, exists := byID[enclosure.ID]; exists {
+			return errors.New("duplicate enclosure id")
+		}
+		byID[enclosure.ID] = enclosure
+		total += enclosure.Size
+		if len(enclosure.Content) > 0 {
+			if int64(len(enclosure.Content)) != enclosure.Size {
+				return errors.New("enclosure size mismatch")
+			}
+			sum := sha256.Sum256(enclosure.Content)
+			if enclosure.Digest != "sha256:"+hex.EncodeToString(sum[:]) {
+				return errors.New("enclosure digest mismatch")
+			}
+		}
+	}
+	if total > 5<<20 {
+		return errors.New("total enclosure size exceeds 5 MiB")
+	}
+	validateReferences := func(nodes []Node) error {
+		for _, node := range nodes {
+			if node.Enclosure == "" {
+				continue
+			}
+			enclosure, exists := byID[node.Enclosure]
+			if !exists || enclosure.Digest != node.Digest {
+				return fmt.Errorf("missing enclosure %q", node.Enclosure)
+			}
+			if node.Type == "image" && !strings.HasPrefix(enclosure.MediaType, "image/") {
+				return errors.New("image references non-image enclosure")
+			}
+		}
+		return nil
+	}
+	if err := validateReferences(response.Document.Body); err != nil {
+		return err
+	}
+	for _, nodes := range response.Document.Slots {
+		if err := validateReferences(nodes); err != nil {
+			return err
+		}
+	}
+	for _, template := range response.Templates {
+		if err := validateReferences(template.Document.Body); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func supportedMediaType(value string) bool {
+	switch value {
+	case "image/png", "image/jpeg", "image/webp", "application/pdf", "text/plain":
+		return true
+	}
+	return false
 }
 
 func validateTemplateDocument(document MailWebDocument) error {
@@ -230,6 +306,9 @@ func validTemplateVersion(value string) bool {
 }
 
 func validateNode(node Node) error {
+	if node.Type != "image" && node.Type != "attachment" && (node.Enclosure != "" || node.Digest != "" || node.Description != "") {
+		return errors.New("node contains enclosure fields from another type")
+	}
 	switch node.Type {
 	case "heading":
 		if node.Level < 1 || node.Level > 6 {
@@ -259,7 +338,10 @@ func validateNode(node Node) error {
 			return errors.New("invalid button variant")
 		}
 	case "image":
-		if !safeReference(node.Src) {
+		if (node.Enclosure == "") == (node.Src == "") || (node.Enclosure != "" && (!formFieldName.MatchString(node.Enclosure) || !validTemplateVersion(node.Digest))) {
+			return errors.New("image requires exactly one safe src or enclosure reference")
+		}
+		if node.Src != "" && !safeReference(node.Src) {
 			return errors.New("image requires a safe src")
 		}
 		if node.Level != 0 || node.Text != "" || node.Label != "" || node.Href != "" || hasFormMetadata(node) || hasTemplateMetadata(node) {
@@ -267,6 +349,10 @@ func validateNode(node Node) error {
 		}
 		if node.Variant != "" && node.Variant != "normal" && node.Variant != "hero" {
 			return errors.New("invalid image variant")
+		}
+	case "attachment":
+		if node.Label == "" || !formFieldName.MatchString(node.Enclosure) || !validTemplateVersion(node.Digest) || node.Level != 0 || node.Text != "" || node.Href != "" || node.Src != "" || hasFormMetadata(node) || node.Name != "" || len(node.Items) != 0 {
+			return errors.New("attachment requires label and enclosure identity")
 		}
 	case "form":
 		if node.Method != "GET" && node.Method != "POST" {

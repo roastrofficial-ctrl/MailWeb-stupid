@@ -20,7 +20,7 @@ $assert = function (bool $condition, string $message) use (&$assertions): void {
     if (! $condition) { throw new RuntimeException($message); }
 };
 
-$assert(config('mailweb.protocol') === '0.4', 'Package configuration did not load.');
+$assert(config('mailweb.protocol') === '0.5', 'Package configuration did not load.');
 $assert(app()->bound('mailweb'), 'Service provider did not bind the MailWeb manager.');
 $commands = array_keys(app(Kernel::class)->all());
 $assert(in_array('mailweb:listen', $commands, true), 'Listener command was not registered.');
@@ -72,7 +72,7 @@ $decodedForStatus = $codec->decode([
 ]);
 $assert($codec->response($decodedForStatus, $accepted)['status'] === 202, 'Response status serialization failed.');
 foreach ([
-	['mailweb' => '0.5', 'id' => '01J00000000000000000000002', 'method' => 'GET', 'uri' => 'mailweb://demo.local/', 'headers' => []],
+	['mailweb' => '0.6', 'id' => '01J00000000000000000000002', 'method' => 'GET', 'uri' => 'mailweb://demo.local/', 'headers' => []],
 	['mailweb' => '0.3', 'id' => 'bad', 'method' => 'GET', 'uri' => 'mailweb://demo.local/', 'headers' => []],
 	['mailweb' => '0.3', 'id' => '01J00000000000000000000003', 'method' => 'GET', 'uri' => 'mailweb://demo.local/', 'headers' => [], 'body' => []],
 ] as $invalid) {

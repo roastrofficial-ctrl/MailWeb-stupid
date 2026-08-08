@@ -38,7 +38,7 @@ type journeyRecorder struct {
 
 func newJourney(uri, method, transport string) *journeyRecorder {
 	now := time.Now().UTC()
-	recorder := &journeyRecorder{journey: Journey{ID: "mw_" + newID(), URI: uri, Method: method, Protocol: "0.4", Transport: transport, Delivery: "live correspondence", StartedAt: now, Outcome: "active", Events: []JourneyEvent{}}}
+	recorder := &journeyRecorder{journey: Journey{ID: "mw_" + newID(), URI: uri, Method: method, Protocol: "0.5", Transport: transport, Delivery: "live correspondence", StartedAt: now, Outcome: "active", Events: []JourneyEvent{}}}
 	recorder.addAt(now, "navigation.started", "navigation requested", map[string]string{"uri": uri, "method": method})
 	return recorder
 }

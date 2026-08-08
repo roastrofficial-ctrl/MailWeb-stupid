@@ -55,7 +55,7 @@ func (transport *HTTPTransport) Exchange(ctx context.Context, message MailWebReq
 	}
 
 	var messageResponse MailWebResponse
-	decoder := json.NewDecoder(io.LimitReader(response.Body, 1<<20))
+	decoder := json.NewDecoder(io.LimitReader(response.Body, 7<<20))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&messageResponse); err != nil {
 		return MailWebResponse{}, fmt.Errorf("decode MailWebResponse: %w", err)

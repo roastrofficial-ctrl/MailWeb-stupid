@@ -3,7 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -387,7 +392,7 @@ func TestStationeryFirstDeliveryCompositionAndReuse(t *testing.T) {
 func TestStationeryValidationAndMissingBehavior(t *testing.T) {
 	template := testStationery()
 	request, _ := NewRequest("mailweb://demo.local/")
-	response := MailWebResponse{MailWeb: "0.4", RequestID: request.ID, Status: 200, Document: &MailWebDocument{Title: "Page", Body: []Node{}, Template: template.ID, TemplateVersion: template.Version, Slots: map[string][]Node{"unknown": {{Type: "paragraph", Text: "lost"}}}}, Templates: []TemplateDefinition{template}}
+	response := MailWebResponse{MailWeb: "0.5", RequestID: request.ID, Status: 200, Document: &MailWebDocument{Title: "Page", Body: []Node{}, Template: template.ID, TemplateVersion: template.Version, Slots: map[string][]Node{"unknown": {{Type: "paragraph", Text: "lost"}}}}, Templates: []TemplateDefinition{template}}
 	if err := ValidateResponse(request, response); err != nil {
 		t.Fatal(err)
 	}
@@ -444,6 +449,86 @@ func TestNavItemsParticipateInPrEmail(t *testing.T) {
 	waitFor(t, time.Second, func() bool { return requestCount(transport) == 2 })
 	if transport.requests[1].URI != "mailweb://demo.local/about" {
 		t.Fatalf("nav destination was not pre-mailed: %#v", transport.requests)
+	}
+}
+
+func enclosureFixture() Enclosure {
+	content := []byte("enclosed correspondence")
+	sum := sha256.Sum256(content)
+	return Enclosure{ID: "manifesto", Filename: "manifesto.txt", MediaType: "text/plain", Size: int64(len(content)), Digest: "sha256:" + hex.EncodeToString(sum[:]), Content: content}
+}
+
+func TestEnclosureValidationStorageAndReuse(t *testing.T) {
+	request, _ := NewRequest("mailweb://demo.local/")
+	enclosure := enclosureFixture()
+	response := MailWebResponse{MailWeb: "0.5", RequestID: request.ID, Status: 200, Enclosures: []Enclosure{enclosure}, Document: &MailWebDocument{Title: "File", Body: []Node{{Type: "attachment", Enclosure: enclosure.ID, Digest: enclosure.Digest, Label: "Download"}}}}
+	if err := ValidateResponse(request, response); err != nil {
+		t.Fatal(err)
+	}
+	session := NewBrowserSession(&fakeTransport{}, "test")
+	journey := newJourney(request.URI, "GET", "test")
+	prepared, err := session.prepareEnclosures(response, request.URI, journey)
+	if err != nil || len(prepared.Enclosures[0].Content) != 0 {
+		t.Fatalf("enclosure not filed safely: %#v %v", prepared, err)
+	}
+	if stored, ok := session.Enclosure(enclosure.Digest); !ok || !bytes.Equal(stored.Content, enclosure.Content) {
+		t.Fatal("binary bytes were not preserved")
+	}
+	reused := response
+	reused.Enclosures[0].Content = nil
+	if _, err := session.prepareEnclosures(reused, request.URI, journey); err != nil {
+		t.Fatalf("known enclosure was not reused: %v", err)
+	}
+	damaged := response
+	damaged.Enclosures[0].Content = []byte("tampered")
+	if ValidateResponse(request, damaged) == nil {
+		t.Fatal("digest mismatch accepted")
+	}
+	duplicate := response
+	duplicate.Enclosures = append(duplicate.Enclosures, enclosure)
+	if ValidateResponse(request, duplicate) == nil {
+		t.Fatal("duplicate enclosure ID accepted")
+	}
+	unsafe := response
+	unsafe.Enclosures[0].Filename = "../manifesto.txt"
+	if ValidateResponse(request, unsafe) == nil {
+		t.Fatal("unsafe filename accepted")
+	}
+	oversized := response
+	oversized.Enclosures[0].Size = (2 << 20) + 1
+	oversized.Enclosures[0].Content = nil
+	if ValidateResponse(request, oversized) == nil {
+		t.Fatal("oversized enclosure accepted")
+	}
+	empty := NewBrowserSession(&fakeTransport{}, "test")
+	if _, err := empty.prepareEnclosures(reused, request.URI, journey); !isMissingEnclosure(err) {
+		t.Fatalf("missing cached enclosure did not fail safely: %v", err)
+	}
+}
+
+func TestMultipartMIMEEnclosureDecoding(t *testing.T) {
+	enclosure := enclosureFixture()
+	response := MailWebResponse{MailWeb: "0.5", RequestID: "01J00000000000000000000000", Status: 200, Enclosures: []Enclosure{{ID: enclosure.ID, Filename: enclosure.Filename, MediaType: enclosure.MediaType, Size: enclosure.Size, Digest: enclosure.Digest}}, Document: &MailWebDocument{Title: "MIME", Body: []Node{}}}
+	payload, _ := json.Marshal(response)
+	raw := "From: browse@demo.local\r\nTo: postbox@client.local\r\nSubject: response\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=letter\r\n\r\n--letter\r\nContent-Type: application/mailweb+json\r\n\r\n" + string(payload) + "\r\n--letter\r\nContent-Type: text/plain\r\nContent-ID: <manifesto>\r\nContent-Transfer-Encoding: base64\r\n\r\nZW5jbG9zZWQgY29ycmVzcG9uZGVuY2U=\r\n--letter--\r\n"
+	decoded, err := parseMailWebResponse([]byte(raw))
+	if err != nil || !bytes.Equal(decoded.Enclosures[0].Content, enclosure.Content) {
+		t.Fatalf("MIME enclosure failed: %#v %v", decoded, err)
+	}
+}
+
+func TestHTTPTransportPreservesLogicalEnclosure(t *testing.T) {
+	enclosure := enclosureFixture()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var incoming MailWebRequest
+		_ = json.NewDecoder(request.Body).Decode(&incoming)
+		_ = json.NewEncoder(writer).Encode(MailWebResponse{MailWeb: incoming.MailWeb, RequestID: incoming.ID, Status: 200, Enclosures: []Enclosure{enclosure}, Document: &MailWebDocument{Title: "HTTP", Body: []Node{}}})
+	}))
+	defer server.Close()
+	request, _ := NewRequest("mailweb://demo.local/")
+	response, err := NewHTTPTransport(server.URL).Exchange(context.Background(), request)
+	if err != nil || !bytes.Equal(response.Enclosures[0].Content, enclosure.Content) {
+		t.Fatalf("HTTP enclosure round trip failed: %v", err)
 	}
 }
 

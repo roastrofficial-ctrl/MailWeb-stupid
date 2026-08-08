@@ -1,6 +1,6 @@
-# MailWeb Protocol v0.4
+# MailWeb Protocol v0.5
 
-MailWeb v0.4 defines GET and POST requests, correlated responses, semantic documents, navigation, constrained Presentation Intent, and reusable semantic templates (“stationery”). It does not define a transport or allow publisher HTML, CSS, or JavaScript.
+MailWeb v0.5 adds content-addressed file enclosures to requests, documents, navigation, Presentation Intent, and reusable stationery. Images and explicit downloads can arrive in the same correspondence without publisher HTML, CSS, JavaScript, or follow-up asset requests.
 
 - [Protocol specification](../../docs/protocol.md)
 - [MailWebRequest schema](schema/mailweb-request.schema.json)
@@ -12,3 +12,6 @@ MailWeb v0.4 defines GET and POST requests, correlated responses, semantic docum
 - [Template fixture](examples/example-template.json)
 - [First stationery delivery](examples/example-template-first-response.json)
 - [Stationery reuse](examples/example-template-reuse-response.json)
+- [Response with enclosed image](examples/response-with-image.json)
+- [Response with enclosed download](examples/response-with-download.json)
+- [Response reusing a known enclosure](examples/response-reusing-known-enclosure.json)

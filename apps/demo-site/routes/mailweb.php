@@ -3,6 +3,9 @@
 use MailWeb\Laravel\Facades\MailWeb;
 use MailWeb\Laravel\Http\MailWebRequest;
 
+$hero = MailWeb::enclosure(resource_path('mailweb/correspondence-hero.png'), 'correspondenceHero', 'correspondence-hero.png');
+$manifesto = MailWeb::enclosure(resource_path('mailweb/mailweb-manifesto.txt'), 'manifesto', 'mailweb-manifesto.txt');
+
 $stationery = MailWeb::template('dear-internet/site', fn () => MailWeb::page('Dear Internet stationery')
 	->presentation('#315C45', '#FFFDF8', '#17231C', '#F3EFE5', 'editorial', 'spacious', 'soft')
 	->heading('Dear Internet', variant: 'display')
@@ -15,14 +18,17 @@ $content = fn (string $title) => MailWeb::page($title);
 
 MailWeb::get('/', fn () => $letter('Dear Internet')->slot('content', $content('Home')
     ->heading('This looks like a website.')
+	->image($hero, 'An enormous pile of private correspondence beside a computer receiving an envelope', 'hero')
     ->paragraph("It isn't. Every word arrived as private correspondence.")
     ->paragraph('This first reply also enclosed reusable semantic stationery: the identity, navigation and footer surrounding this letter.')
     ->paragraph('Follow another address and the publisher will mail only its new content. Postbox already has the site-shaped paper.')
     ->button('Prove it was posted', '/proof', 'prominent')
+	->attachment($manifesto, 'Download the entirely unnecessary MailWeb manifesto', 'Plain text · already enclosed in this private reply')
     ->link('Why browse by correspondence?', '/why')));
 
 MailWeb::get('/about', fn () => $letter('About this correspondence')->slot('content', $content('About')
 	->heading('The page did not mail its navigation again.')
+	->image($hero, 'The same correspondence artwork, reused from your Postbox')
 	->paragraph('This reply contains About-specific semantic nodes and a reference to dear-internet/site.')
 	->paragraph('Postbox found the matching stationery version on file, inserted this letter into its content slot, and rendered the complete page locally.')
 	->link('Return home', '/')));

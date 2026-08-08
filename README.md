@@ -90,7 +90,7 @@ produces a request conceptually like:
 
 ```json
 {
-  "mailweb": "0.4",
+  "mailweb": "0.5",
   "method": "GET",
   "uri": "mailweb://demo.local/hello"
 }
@@ -106,7 +106,7 @@ No HTTP response was used to deliver the page.
 
 MailWeb isn't limited to static documents.
 
-Protocol 0.4 supports GET, query parameters, POST, semantic forms, first-class navigation, and reusable semantic templates called stationery.
+Protocol 0.5 supports GET, POST, semantic forms, navigation, reusable stationery, and content-addressed file enclosures.
 
 A MailWeb page can present an input field, the user can submit it, Laravel can process the submitted data, and the resulting dynamic document travels back through the same correspondence mechanism.
 
@@ -223,6 +223,14 @@ Dear Internet demonstrates this with one shared identity, navigation, content sl
 
 Templates contain no HTML, Blade, CSS, JavaScript, expressions, loops, inheritance, or executable components. Unknown supplied slots fail validation; missing slots render nothing; an unavailable exact version produces a safe `MISSING STATIONERY` state.
 
+### Enclosures
+
+Protocol 0.5 allows images and explicitly downloadable files to arrive inside the same reply. SMTP uses real `multipart/mixed` attachments; the HTTP development carrier uses the equivalent JSON/base64 representation. Postbox reconstructs one logical response, verifies every byte count and SHA-256 digest, and files valid resources in a separate in-memory **ENCLOSURES** archive.
+
+The Dear Internet homepage’s hero PNG and unnecessary plain-text manifesto are genuine attachments. The graphical renderer obtains them only from Postbox’s loopback enclosure endpoint. About reuses the same image by digest without retransmitting its 1.8 MB of bytes, and prEmail can file both correspondence and resources before a click.
+
+No SVG, HTML, JavaScript, CSS, executable files, audio, video, remote asset fallback, or automatic opening is supported. Opening an attachment is a local reader action and creates no new publisher request.
+
 This repository currently provides two development transports behind the same Go interface:
 
 ```text
@@ -283,7 +291,7 @@ It's simply a Laravel application that happens to speak MailWeb.
 - `apps/postbox` — Go graphical and terminal clients, transports, protocol validator and renderers
 - `apps/demo-site` — ordinary Laravel application consuming the reusable package
 - `packages/protocol` — protocol specification, JSON Schema and examples
-- `packages/laravel-mailweb` — reusable Composer package implementing MailWeb 0.4 for Laravel
+- `packages/laravel-mailweb` — reusable Composer package implementing MailWeb 0.5 for Laravel
 - `extension` — reserved for future browser integration
 
 ## Browse locally

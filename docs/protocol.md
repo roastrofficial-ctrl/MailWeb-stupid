@@ -1,8 +1,8 @@
-# MailWeb Protocol v0.4
+# MailWeb Protocol v0.5
 
 ## Status
 
-This document defines the experimental MailWeb Protocol v0.4. The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** carry their usual RFC meanings.
+This document defines the experimental MailWeb Protocol v0.5. The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** carry their usual RFC meanings.
 
 ## 1. Scope and transport independence
 
@@ -12,7 +12,7 @@ Messages are UTF-8 JSON objects. The canonical [request](../packages/protocol/sc
 
 ## 2. Requests
 
-Every request contains `mailweb: "0.4"`, a fresh uppercase ULID `id`, `method`, an absolute `mailweb://` URI, and string-valued `headers`.
+Every request contains `mailweb: "0.5"`, a fresh uppercase ULID `id`, `method`, an absolute `mailweb://` URI, and string-valued `headers`.
 
 ### 2.1 GET and query parameters
 
@@ -20,7 +20,7 @@ GET retrieves a document and MUST NOT contain `body`. Query parameters belong in
 
 ```json
 {
-  "mailweb": "0.4",
+  "mailweb": "0.5",
   "id": "01J00000000000000000000000",
   "method": "GET",
   "uri": "mailweb://demo.local/search?q=internet",
@@ -36,7 +36,7 @@ POST submits application data. In v0.4, `body` is a JSON object and is REQUIRED 
 
 ```json
 {
-  "mailweb": "0.4",
+  "mailweb": "0.5",
   "id": "01J00000000000000000000000",
   "method": "POST",
   "uri": "mailweb://demo.local/hello",
@@ -49,7 +49,7 @@ Headers are MailWeb application metadata, not SMTP or HTTP headers. A client MAY
 
 ## 3. Responses and correlation
 
-A response contains `mailweb: "0.4"`, `request_id`, an integer `status` from 100 through 599, and a `document`. `request_id` MUST exactly match the request `id`. Status describes the MailWeb result, not carrier delivery. A document is required even for errors.
+A response contains `mailweb: "0.5"`, `request_id`, an integer `status` from 100 through 599, and a `document`. `request_id` MUST exactly match the request `id`. Status describes the MailWeb result, not carrier delivery. A document is required even for errors.
 
 ## 4. Documents
 
@@ -127,6 +127,20 @@ Composition is deterministic:
 5. Render the resulting ordinary semantic document.
 
 Template Presentation Intent supplies defaults; response properties override those defaults; reader overrides remain authoritative. No inheritance, nested templates, loops, conditions, expressions, HTML, CSS, or executable code exist. Human-facing clients may call templates “stationery”; wire fields retain the technical word `template`.
+
+### 4.4 Enclosures
+
+Protocol 0.5 responses MAY declare up to 16 transport-independent `enclosures`. Each has a unique request-local `id`, sanitized basename `filename`, allowed `media_type`, byte `size`, and lowercase SHA-256 `digest`. JSON carriers represent optional bytes as base64 `content`. The logical model never mentions MIME parts or carrier URLs.
+
+An `image` may reference an enclosure by exact `enclosure` ID and `digest`. An `attachment` node adds a plain label and optional description for an explicitly opened or downloaded file. Supported inline images are PNG, JPEG, and WebP; SVG, HTML, scripts, stylesheets, audio, video, and executables are excluded. Downloadable v0.5 enclosures are additionally limited to PDF and plain text.
+
+Clients validate decoded byte length and digest before filing or exposing content. This implementation permits 16 enclosures, 2 MiB per enclosure, 5 MiB declared total, and 64 session-cached digests. Duplicate IDs, unsafe filenames, unsupported media, malformed base64/MIME, oversized data, and digest mismatches fail safely. Missing referenced bytes produce `MISSING ENCLOSURE`; no remote fallback occurs.
+
+Postbox MAY advertise at most 64 digests actually available in session memory using the JSON-array `mailweb-known-resources` header. A publisher may then omit `content` while retaining the enclosure descriptor. Clients resolve only the exact digest. Stationery and response slots may reference enclosures under the same rule.
+
+SMTP commonly maps a response to `multipart/mixed`: one `application/mailweb+json` part plus binary MIME parts associated through adapter-private Content-IDs. HTTP development transport uses JSON/base64. After decoding, both yield the same logical response. MIME identifiers are not protocol fields.
+
+Opening a filed enclosure is a local Postbox operation and MUST NOT imply a publisher request. Renderers MUST treat bytes as untrusted, MUST NOT execute attachments, and MUST require explicit action for downloads.
 
 ## 5. Processing and safety
 

@@ -1,0 +1,12 @@
+THE ENTIRELY UNNECESSARY MAILWEB MANIFESTO
+
+The Internet is not HTTP.
+A document is not its delivery mechanism.
+A link may be a request for private correspondence.
+A page may arrive with its stationery already folded around it.
+And if the page needs a picture, the picture can fit in the same letter.
+
+No CDN was contacted in the making of this attachment.
+
+MailWeb is deliberately absurd.
+That is the point.

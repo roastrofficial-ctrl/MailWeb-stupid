@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Facade;
  *  @method static \MailWeb\Laravel\Documents\Page page(string $title, int $status = 200)
  *  @method static \MailWeb\Laravel\Documents\TextField text(string $name, string $label, string $placeholder = '', bool $required = false)
  *  @method static \MailWeb\Laravel\Documents\Template template(string $id, ?callable $definition = null)
+ *  @method static \MailWeb\Laravel\Documents\Enclosure enclosure(string $path, string $id, ?string $filename = null)
  */
 final class MailWeb extends Facade
 {
