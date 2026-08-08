@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'protocol' => '0.3',
+    'protocol' => '0.4',
     'routes' => base_path('routes/mailweb.php'),
     'http_endpoint' => '/mailweb/messages',
     'publisher_address' => env('MAILWEB_PUBLISHER_MAILBOX', 'browse@demo.local'),

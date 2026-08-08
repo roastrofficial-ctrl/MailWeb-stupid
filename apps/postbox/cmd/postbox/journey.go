@@ -14,19 +14,19 @@ type JourneyEvent struct {
 }
 
 type Journey struct {
-	ID              string          `json:"id"`
-	URI             string          `json:"uri"`
-	Method          string          `json:"method"`
-	Protocol        string          `json:"protocol"`
-	Transport       string          `json:"transport"`
-	Delivery        string          `json:"delivery"`
-	StartedAt       time.Time       `json:"started_at"`
-	CompletedAt     *time.Time      `json:"completed_at,omitempty"`
-	Outcome         string          `json:"outcome"`
-	RoundTripMS     int64           `json:"round_trip_ms"`
-	NetworkWaitMS   int64           `json:"network_wait_ms"`
-	OriginalJourney string          `json:"original_journey_id,omitempty"`
-	Events          []JourneyEvent  `json:"events"`
+	ID              string           `json:"id"`
+	URI             string           `json:"uri"`
+	Method          string           `json:"method"`
+	Protocol        string           `json:"protocol"`
+	Transport       string           `json:"transport"`
+	Delivery        string           `json:"delivery"`
+	StartedAt       time.Time        `json:"started_at"`
+	CompletedAt     *time.Time       `json:"completed_at,omitempty"`
+	Outcome         string           `json:"outcome"`
+	RoundTripMS     int64            `json:"round_trip_ms"`
+	NetworkWaitMS   int64            `json:"network_wait_ms"`
+	OriginalJourney string           `json:"original_journey_id,omitempty"`
+	Events          []JourneyEvent   `json:"events"`
 	Request         *MailWebRequest  `json:"request,omitempty"`
 	Response        *MailWebResponse `json:"response,omitempty"`
 }
@@ -38,7 +38,7 @@ type journeyRecorder struct {
 
 func newJourney(uri, method, transport string) *journeyRecorder {
 	now := time.Now().UTC()
-	recorder := &journeyRecorder{journey: Journey{ID: "mw_" + newID(), URI: uri, Method: method, Protocol: "0.3", Transport: transport, Delivery: "live correspondence", StartedAt: now, Outcome: "active", Events: []JourneyEvent{}}}
+	recorder := &journeyRecorder{journey: Journey{ID: "mw_" + newID(), URI: uri, Method: method, Protocol: "0.4", Transport: transport, Delivery: "live correspondence", StartedAt: now, Outcome: "active", Events: []JourneyEvent{}}}
 	recorder.addAt(now, "navigation.started", "navigation requested", map[string]string{"uri": uri, "method": method})
 	return recorder
 }

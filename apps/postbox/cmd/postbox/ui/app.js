@@ -1,6 +1,6 @@
 "use strict";
 
-const elements = Object.fromEntries(["address", "address-form", "back", "forward", "reload", "loading", "error", "viewport", "correspondence-stage", "travelling-envelope", "correspondence-status", "route-host", "route-mailbox", "postbox-open", "postbox-drawer", "postbox-items", "postbox-count", "correspondence-view-open", "correspondence-view", "email-request", "email-response", "journey-view-open", "journey-view", "journey-history", "journey-summary", "journey-events", "journey-instant"].map((id) => [id, document.getElementById(id)]));
+const elements = Object.fromEntries(["address", "address-form", "back", "forward", "reload", "loading", "error", "viewport", "correspondence-stage", "travelling-envelope", "correspondence-status", "route-host", "route-mailbox", "postbox-open", "postbox-drawer", "postbox-items", "postbox-count", "stationery-items", "correspondence-view-open", "correspondence-view", "email-request", "email-response", "journey-view-open", "journey-view", "journey-history", "journey-summary", "journey-events", "journey-instant"].map((id) => [id, document.getElementById(id)]));
 let currentState = null;
 let appearanceMode = "correspondent";
 let knownArchive = new Set();
@@ -52,7 +52,7 @@ class PresentationResolver {
 }
 
 class PostboxDrawer {
-    render(archive) {
+    render(archive, stationery = []) {
         elements["postbox-items"].replaceChildren();
         elements["postbox-count"].textContent = String(archive.length);
         for (const item of archive) {
@@ -65,6 +65,8 @@ class PostboxDrawer {
             if (!item.current) { const open = document.createElement("button"); open.type = "button"; open.textContent = "Retrieve letter"; open.addEventListener("click", () => { elements["postbox-drawer"].close(); void navigate({uri: item.uri}); }); article.appendChild(open); }
             elements["postbox-items"].appendChild(article);
         }
+		elements["stationery-items"].replaceChildren();
+		for (const file of stationery) { const article = document.createElement("article"), mark = document.createElement("span"), title = document.createElement("h3"), id = document.createElement("code"), meta = document.createElement("p"), details = rawDetails("View semantic stationery", file.document); article.className = "stationery-item"; mark.className = "stationery-mark"; mark.textContent = "▧"; title.textContent = file.title; id.textContent = file.id; meta.textContent = `received ${relativeTime(file.received_at)} · ${file.version.slice(0, 18)}… · used by ${file.uses?.length || 0} page(s)`; article.append(mark, title, id, meta, details); elements["stationery-items"].appendChild(article); }
     }
 }
 
@@ -105,7 +107,7 @@ class JourneyInspector {
     }
     event(event, journey) {
         const item = document.createElement("li"), code = document.createElement("code"), body = document.createElement("div"), label = document.createElement("strong"), time = document.createElement("time");
-        code.textContent = (event.type.split(".")[0] || "event").toUpperCase(); label.textContent = event.label; time.textContent = formatTime(event.timestamp); body.append(label, time);
+        const eventCodes = {navigation: "NAV", cache: "BOX", premail: "PRE", request: "REQ", transport: "SMTP", mailbox: "MAIL", response: "MW", template: "TPL", stationery: "BOX", document: "DOC", form: "FORM"}; code.textContent = eventCodes[event.type.split(".")[0]] || "EVENT"; label.textContent = event.label; time.textContent = formatTime(event.timestamp); body.append(label, time);
         if (event.metadata) { const meta = document.createElement("small"); meta.textContent = Object.entries(event.metadata).map(([key, value]) => `${key}=${value}`).join(" · "); body.appendChild(meta); }
         if (event.type === "request.created" && journey.request) body.appendChild(rawDetails("Actual MailWebRequest", journey.request));
         if (event.type === "response.received" && journey.response) body.appendChild(rawDetails("Actual MailWebResponse", journey.response));
@@ -139,7 +141,7 @@ async function requestState(endpoint, payload, kind, target) {
     try {
         const response = await fetch(endpoint, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
         const result = await response.json();
-        if (!response.ok) { if (result.state) { currentState = result.state; elements["journey-view-open"].disabled = !result.state.last_journey; } throw new Error(result.error || "Navigation failed"); }
+        if (!response.ok) { if (result.state) { currentState = result.state; elements["journey-view-open"].disabled = !result.state.last_journey; if (result.state.retained_correspondence) setText("debug-response", JSON.stringify(result.state.retained_correspondence, null, 2)); } throw new Error(result.error || "Navigation failed"); }
         await animation.finish(result.state.current);
         updateState(result.state);
     } catch (error) {
@@ -151,7 +153,7 @@ function updateState(state, backgroundOnly = false) {
     const newArchive = new Set((state.archive || []).map((item) => item.uri));
     const arrivals = [...newArchive].filter((uri) => !knownArchive.has(uri) && uri !== state.current?.uri);
     if (arrivals.length) { elements["postbox-open"].classList.add("has-arrival"); setTimeout(() => elements["postbox-open"].classList.remove("has-arrival"), 1000); }
-    knownArchive = newArchive; currentState = state; postbox.render(state.archive || []);
+    knownArchive = newArchive; currentState = state; postbox.render(state.archive || [], state.stationery || []);
 	renderPremailLetters(state.premail?.targets || []);
     setText("client-mailbox", state.client_mailbox || "No mailbox — direct transport");
     setText("premail-status", state.notice || state.premail?.message || "prEmail: idle.");
@@ -173,6 +175,7 @@ function renderDocument(current) {
     elements.viewport.replaceChildren(); document.title = `${mailwebDocument.title} — Postbox`;
     const page = document.createElement("div"); page.className = "mailweb-document";
 	const arrival = document.createElement("p"); arrival.className = "arrival-note"; arrival.textContent = delivery !== "live" ? "PRIVATE EMAIL ALREADY RECEIVED — RETRIEVED FROM YOUR POSTBOX" : "PRIVATE EMAIL RECEIVED — UNSEALED AND RENDERED BY POSTBOX"; page.appendChild(arrival);
+    if (current.stationery_status) { const stationery = document.createElement("p"); stationery.className = "stationery-note"; stationery.textContent = current.stationery_status; page.appendChild(stationery); }
     const postal = postalState(current); if (postal) page.appendChild(renderPostalState(postal, current));
     for (const node of mailwebDocument.body) page.appendChild(renderNode(node, currentURI));
     elements.viewport.appendChild(page);
@@ -184,6 +187,7 @@ function renderNode(node, currentURI) {
     case "paragraph": { const paragraph = document.createElement("p"); paragraph.textContent = node.text; return paragraph; }
     case "link": case "button": { const wrapper = document.createElement("p"), control = document.createElement("button"); control.type = "button"; control.className = node.type === "button" ? "document-button" : "document-link"; if (node.variant === "prominent") control.classList.add("prominent"); control.textContent = node.label; if (isMailWebReference(node.href, currentURI)) control.addEventListener("click", () => void navigate({reference: node.href})); else { control.disabled = true; control.title = "External navigation is disabled by Postbox"; } wrapper.appendChild(control); return wrapper; }
     case "image": { const figure = document.createElement("figure"); if (node.variant === "hero") figure.className = "hero-image"; const resolved = safeURL(node.src, currentURI); if (resolved && (resolved.protocol === "http:" || resolved.protocol === "https:")) { const image = document.createElement("img"); image.src = resolved.href; image.alt = node.alt; image.loading = "lazy"; figure.appendChild(image); } else { const placeholder = document.createElement("div"); placeholder.className = "image-placeholder"; placeholder.textContent = node.alt || "MailWeb image"; figure.appendChild(placeholder); } return figure; }
+    case "nav": { const nav = document.createElement("nav"), label = document.createElement("span"), list = document.createElement("ul"); nav.className = "mailweb-nav"; nav.setAttribute("aria-label", node.label); label.className = "visually-hidden"; label.textContent = node.label; for (const item of node.items) { const li = document.createElement("li"), control = document.createElement("button"), destination = resolveReference(item.href); control.type = "button"; control.textContent = item.label; if (destination === currentURI) { control.className = "current"; control.setAttribute("aria-current", "page"); } control.addEventListener("click", () => void navigate({reference: item.href})); li.appendChild(control); list.appendChild(li); } nav.append(label, list); return nav; }
     case "form": { const form = document.createElement("form"); form.className = "mailweb-form"; for (const field of node.fields) { const group = document.createElement("label"); group.className = "form-field"; const label = document.createElement("span"); label.textContent = field.label; const input = document.createElement("input"); input.type = "text"; input.name = field.name; input.placeholder = field.placeholder || ""; input.required = Boolean(field.required); input.autocomplete = "off"; group.append(label, input); form.appendChild(group); } const submit = document.createElement("button"); submit.type = "submit"; submit.className = "document-button"; submit.textContent = node.submit; form.appendChild(submit); form.addEventListener("submit", (event) => { event.preventDefault(); const values = Object.create(null), data = new FormData(form); for (const field of node.fields) values[field.name] = String(data.get(field.name) || ""); void submitForm(node, values); }); return form; }
     default: { const unsupported = document.createElement("p"); unsupported.textContent = "Unsupported document node."; return unsupported; }
     }
@@ -197,7 +201,9 @@ function requestEmail(current) {
 function responseEmail(current) {
     const uri = new URL(current.uri), document = current.response.document || {title: "No enclosure", body: []}, counts = {}; for (const node of document.body) counts[node.type] = (counts[node.type] || 0) + 1;
     const inventory = Object.entries(counts).map(([type, count]) => `${count} ${type}${count === 1 ? "" : "s"}`).join(" · ");
-    return {subject: `Re: MailWeb correspondence: ${uri.pathname}`, from: current.publisher_mailbox || uri.host, to: current.client_mailbox || "Postbox", timeLabel: "Received", time: formatTime(current.response_received_at), lines: ["Dear Postbox,", current.response.document ? "Certainly. Please find the requested semantic document enclosed:" : "Your message was received without a document enclosure.", `“${document.title}”`, `Status: ${current.response.status} · Protocol: MailWeb ${current.response.mailweb}`, inventory, "Yours,", uri.host], attachmentLabel: "Enclosed document · document.mailweb.json", raw: current.response};
+    const raw = current.raw_response || current.response, template = raw.document?.template, newlyEnclosed = Boolean(template && raw.templates?.some((item) => item.id === template && item.version === raw.document.template_version));
+    const stationeryLine = template ? (newlyEnclosed ? `I have also enclosed our current stationery (${template}) for future correspondence.` : `Please use stationery already on file: ${template} · ${raw.document.template_version}`) : "No stationery reference accompanied this reply.";
+    return {subject: `Re: MailWeb correspondence: ${uri.pathname}`, from: current.publisher_mailbox || uri.host, to: current.client_mailbox || "Postbox", timeLabel: "Received", time: formatTime(current.response_received_at), lines: ["Dear Postbox,", current.response.document ? "Certainly. Please find the requested semantic content enclosed:" : "Your message was received without a document enclosure.", stationeryLine, `“${document.title}”`, `Status: ${current.response.status} · Protocol: MailWeb ${current.response.mailweb}`, inventory, "Yours,", uri.host], attachmentLabel: newlyEnclosed ? "Content and stationery · actual MailWebResponse JSON" : "Content enclosure · actual MailWebResponse JSON", raw};
 }
 
 
@@ -210,7 +216,7 @@ function postalState(current) {
     return null;
 }
 function renderPostalState(postal, current) { const card = document.createElement("section"), stamp = document.createElement("strong"), title = document.createElement("h1"), copy = document.createElement("p"), technical = document.createElement("code"); card.className = `postal-state status-${current.response.status}`; stamp.textContent = postal[0]; title.textContent = postal[1]; copy.textContent = postal[2]; technical.textContent = `MAILWEB STATUS ${current.response.status}`; card.append(stamp, title, copy, technical); return card; }
-function renderTransportFailure(uri, message) { const timeout = message.toLowerCase().includes("timed out"), card = document.createElement("section"), stamp = document.createElement("strong"), title = document.createElement("h1"), copy = document.createElement("p"), retry = document.createElement("button"); card.className = "postal-state transport-failure"; stamp.textContent = timeout ? "NO REPLY" : "DAMAGED"; title.textContent = timeout ? "No correspondence received" : "This correspondence arrived damaged"; copy.textContent = timeout ? `We wrote to ${safeURL(uri)?.host || "the correspondent"}, but no correlated reply arrived before the real transport timeout.` : "Postbox could not transport, decode, or validate the correspondence. The technical error is shown below."; retry.type = "button"; retry.className = "document-button"; retry.textContent = "Send again"; retry.addEventListener("click", () => void navigate({uri})); card.append(stamp, title, copy, retry); elements.viewport.replaceChildren(card); }
+function renderTransportFailure(uri, message) { const timeout = message.toLowerCase().includes("timed out"), missing = message.toLowerCase().includes("missing stationery"), card = document.createElement("section"), stamp = document.createElement("strong"), title = document.createElement("h1"), copy = document.createElement("p"), retry = document.createElement("button"); card.className = "postal-state transport-failure"; stamp.textContent = missing ? "MISSING STATIONERY" : timeout ? "NO REPLY" : "DAMAGED"; title.textContent = missing ? "The right paper is not in your Postbox" : timeout ? "No correspondence received" : "This correspondence arrived damaged"; copy.textContent = missing ? `${message}. The correspondence was not composed using a different version.` : timeout ? `We wrote to ${safeURL(uri)?.host || "the correspondent"}, but no correlated reply arrived before the real transport timeout.` : "Postbox could not transport, decode, or validate the correspondence. The technical error is shown below."; retry.type = "button"; retry.className = "document-button"; retry.textContent = "Send again"; retry.addEventListener("click", () => void navigate({uri})); card.append(stamp, title, copy, retry); elements.viewport.replaceChildren(card); }
 function rawDetails(label, value) { const details = document.createElement("details"), summary = document.createElement("summary"), pre = document.createElement("pre"); summary.textContent = label; pre.textContent = JSON.stringify(value, null, 2); details.append(summary, pre); return details; }
 
 function postalOutcome(current) {
@@ -222,7 +228,7 @@ function postalOutcome(current) {
 	return `Private correspondence received · ${current.round_trip_ms}ms`;
 }
 
-function renderDebug(current) { setText("debug-uri", current.uri); setText("debug-request-id", current.request.id); setText("debug-status", String(current.response.status)); setText("debug-transport", current.transport); setText("debug-method", current.request.method); setText("debug-delivery", current.delivery); setText("debug-sent", formatTime(current.request_sent_at)); setText("debug-received", formatTime(current.response_received_at)); setText("debug-duration", `${current.round_trip_ms} ms`); setText("debug-navigation", `${current.navigation_ms} ms`); setText("debug-prefetched", current.prefetched_at ? formatTime(current.prefetched_at) : "—"); setText("debug-opened", formatTime(current.opened_at)); setText("debug-request", JSON.stringify(current.request, null, 2)); setText("debug-response", JSON.stringify(current.response, null, 2)); }
+function renderDebug(current) { setText("debug-uri", current.uri); setText("debug-request-id", current.request.id); setText("debug-status", String(current.response.status)); setText("debug-transport", current.transport); setText("debug-method", current.request.method); setText("debug-delivery", current.delivery); setText("debug-sent", formatTime(current.request_sent_at)); setText("debug-received", formatTime(current.response_received_at)); setText("debug-duration", `${current.round_trip_ms} ms`); setText("debug-navigation", `${current.navigation_ms} ms`); setText("debug-prefetched", current.prefetched_at ? formatTime(current.prefetched_at) : "—"); setText("debug-opened", formatTime(current.opened_at)); setText("debug-request", JSON.stringify(current.request, null, 2)); setText("debug-response", JSON.stringify(current.raw_response || current.response, null, 2)); }
 function resolveReference(reference) { try { return new URL(reference, currentState?.current?.uri).href; } catch { return reference; } }
 function isMailWebReference(reference, currentURI) { const resolved = safeURL(reference, currentURI); return Boolean(resolved && resolved.protocol === "mailweb:"); }
 function safeURL(reference, base) { try { return new URL(reference, base); } catch { return null; } }

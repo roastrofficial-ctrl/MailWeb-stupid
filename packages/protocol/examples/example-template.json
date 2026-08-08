@@ -1,0 +1,13 @@
+{
+  "id": "dear-internet/site",
+  "version": "sha256:297cec030ab32045a68be8c15b05a502e754483b3824444d7cc4c1370cfbd28b",
+  "document": {
+    "title": "Dear Internet stationery",
+    "body": [
+      {"type": "heading", "level": 1, "text": "Dear Internet"},
+      {"type": "nav", "label": "Main navigation", "items": [{"label": "Home", "href": "/"}, {"label": "About", "href": "/about"}, {"label": "Hello", "href": "/hello"}]},
+      {"type": "slot", "name": "content"},
+      {"type": "paragraph", "text": "Sent with MailWeb."}
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 # Laravel MailWeb
 
-Publish safe, semantic [MailWeb Protocol 0.3](../../docs/protocol.md) documents from an ordinary Laravel application. The package handles protocol envelopes, validation, request correlation, routing, serialization, inbound correspondence, and SMTP replies. Your application writes pages.
+Publish safe, semantic [MailWeb Protocol 0.4](../../docs/protocol.md) documents from an ordinary Laravel application. The package handles protocol envelopes, validation, request correlation, routing, serialization, reusable stationery, inbound correspondence, and SMTP replies. Your application writes pages.
 
 MailWeb is experimental art/software. It sends website-like interactions as private messages and should not be treated as production security infrastructure.
 
@@ -36,13 +36,13 @@ MAILWEB_MAILPIT_URL=http://localhost:8025
 php artisan mailweb:listen
 ```
 
-Your MailWeb client can now request the publisher. Carrier-to-domain discovery is intentionally outside Protocol 0.3, so configure the client destination separately.
+Your MailWeb client can now request the publisher. Carrier-to-domain discovery is intentionally outside Protocol 0.4, so configure the client destination separately.
 
 ## Configuration
 
 The published `config/mailweb.php` contains only the current integration boundaries:
 
-- `protocol` — current package protocol version (`0.3`).
+- `protocol` — current package protocol version (`0.4`).
 - `routes` — route declaration file, normally `routes/mailweb.php`.
 - `http_endpoint` — optional direct/local carrier endpoint, default `/mailweb/messages`.
 - `publisher_address` — sender and inbound publisher mailbox.
@@ -115,7 +115,7 @@ The client owns the input controls. A GET form URI-encodes fields into its actio
 
 ## Document builder
 
-`MailWeb::page($title, $status = 200)` supports every Protocol 0.3 node:
+`MailWeb::page($title, $status = 200)` supports every Protocol 0.4 node:
 
 ```php
 MailWeb::page('A letter', status: 200)
@@ -129,6 +129,22 @@ MailWeb::page('A letter', status: 200)
 ```
 
 Presentation Intent is optional and constrained. It suggests colors, a typeface category, density, and corner treatment; it never supplies CSS, scripts, fonts, or external styles. Readers remain free to override it locally.
+
+Define reusable semantic stationery without manually constructing protocol JSON:
+
+```php
+$site = MailWeb::template('example/site', fn () => MailWeb::page('Site stationery')
+    ->heading('Dear Internet')
+    ->nav('Main navigation', [['Home', '/'], ['About', '/about']])
+    ->slotPlaceholder('content')
+    ->paragraph('Sent with MailWeb.'));
+
+MailWeb::get('/about', fn () => MailWeb::page('About')
+    ->template($site)
+    ->slot('content', MailWeb::page('Content')->heading('About')->paragraph('Only this content changes.')));
+```
+
+The package derives the SHA-256 version automatically. It encloses stationery unless the request advertises that exact version as already filed. Older clients receive a complete composed document instead.
 
 `add(array $node)` is available for low-level protocol work. Prefer the typed helpers in application code.
 
@@ -145,7 +161,7 @@ Use `php artisan mailweb:listen --once` to process currently available messages 
 ## Security and limitations
 
 - Publisher content is semantic data, never arbitrary HTML or JavaScript.
-- Protocol 0.3 does not provide encryption, authentication, access control, replay protection, sessions, or production mailbox discovery.
+- Protocol 0.4 does not provide encryption, authentication, access control, replay protection, sessions, or production mailbox discovery.
 - The Mailpit inbox driver is for local experimentation. Bind a suitable `Inbox` implementation before using another receiving system.
 - Validate and constrain all user input as you would in any Laravel application.
 - A transport is responsible for whatever confidentiality and identity guarantees it claims to provide.

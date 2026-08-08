@@ -1,5 +1,11 @@
 # MailWeb
 
+## Disclaimer
+
+There's a fine line between absurd and profound. Skirting that line is very human, and so is this experiment. The contents of the repo are not all human, though. I used AI to help develop, refine and test this monster. 
+
+I'm a senior Laravel, architecty guy; so the planning, features and **most** engineering was me. The grunt work was my hard working agent (including the awful job of taking my terse, borderline illegible explanation scribbled hastily into several Obsidian documents and expanding it into this readme. I leave it in tact, em dashes and all because like most engineers, I don't do words so good.)
+
 > **What if browsing the web was technically just checking your email?**
 
 MailWeb is a deliberately absurd experiment in transporting web-style documents as private messages instead of serving them directly as HTTP responses.
@@ -82,7 +88,7 @@ produces a request conceptually like:
 
 ```json
 {
-  "mailweb": "0.3",
+  "mailweb": "0.4",
   "method": "GET",
   "uri": "mailweb://demo.local/hello"
 }
@@ -98,7 +104,7 @@ No HTTP response was used to deliver the page.
 
 MailWeb isn't limited to static documents.
 
-Protocol 0.3 supports GET requests, query parameters, POST requests, request bodies and semantic forms.
+Protocol 0.4 supports GET, query parameters, POST, semantic forms, first-class navigation, and reusable semantic templates called stationery.
 
 A MailWeb page can present an input field, the user can submit it, Laravel can process the submitted data, and the resulting dynamic document travels back through the same correspondence mechanism.
 
@@ -207,6 +213,14 @@ MailWeb messages do not know how they are being transported.
 
 The application contract is defined independently in `packages/protocol`.
 
+### Stationery
+
+MailWeb publishers may enclose safe reusable page structure once, identified by a content-derived SHA-256 version. Postbox files that stationery in session memory. Later correspondence carries only page-specific slot content plus the exact template reference; Postbox composes the complete semantic document locally before either renderer sees it.
+
+Dear Internet demonstrates this with one shared identity, navigation, content slot, footer, and Presentation Intent. Open **Your Postbox** to see correspondence and stationery kept as separate kinds of mail. The Journey Inspector records whether stationery was enclosed and filed or found and reused.
+
+Templates contain no HTML, Blade, CSS, JavaScript, expressions, loops, inheritance, or executable components. Unknown supplied slots fail validation; missing slots render nothing; an unavailable exact version produces a safe `MISSING STATIONERY` state.
+
 This repository currently provides two development transports behind the same Go interface:
 
 ```text
@@ -267,7 +281,7 @@ It's simply a Laravel application that happens to speak MailWeb.
 - `apps/postbox` — Go graphical and terminal clients, transports, protocol validator and renderers
 - `apps/demo-site` — ordinary Laravel application consuming the reusable package
 - `packages/protocol` — protocol specification, JSON Schema and examples
-- `packages/laravel-mailweb` — reusable Composer package implementing MailWeb 0.3 for Laravel
+- `packages/laravel-mailweb` — reusable Composer package implementing MailWeb 0.4 for Laravel
 - `extension` — reserved for future browser integration
 
 ## Browse locally
@@ -322,6 +336,7 @@ The graphical client includes:
 - a session-only correspondence archive
 - visibly distinct retrieval of already-received letters
 - constrained publisher Presentation Intent with reader overrides
+- semantic stationery filed and reused by exact content identity
 - Correspondence View translating the real exchange into familiar letters
 - Journey Inspector with real event history and expandable protocol evidence
 - postal state treatments for returned, delayed, declined, damaged, and unavailable correspondence

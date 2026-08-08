@@ -296,8 +296,12 @@ func TestJourneyRecordsTruthfulOrderedNavigationEvents(t *testing.T) {
 		t.Fatalf("unexpected events: %#v", state.LastJourney.Events)
 	}
 	for index, event := range state.LastJourney.Events {
-		if event.Type != want[index] { t.Fatalf("event %d: got %s, want %s", index, event.Type, want[index]) }
-		if index > 0 && event.Timestamp.Before(state.LastJourney.Events[index-1].Timestamp) { t.Fatal("journey timestamps are not monotonic") }
+		if event.Type != want[index] {
+			t.Fatalf("event %d: got %s, want %s", index, event.Type, want[index])
+		}
+		if index > 0 && event.Timestamp.Before(state.LastJourney.Events[index-1].Timestamp) {
+			t.Fatal("journey timestamps are not monotonic")
+		}
 	}
 	if state.Current.JourneyID != state.LastJourney.ID || state.LastJourney.Request.ID != state.Current.Request.ID || state.LastJourney.Outcome != "delivered" {
 		t.Fatalf("journey does not correlate with navigation: %#v", state.LastJourney)
@@ -313,8 +317,14 @@ func TestJourneyCacheRetrievalLinksOriginalCorrespondence(t *testing.T) {
 		t.Fatalf("archive journey lost provenance: %#v", second.LastJourney)
 	}
 	foundHit := false
-	for _, event := range second.LastJourney.Events { if event.Type == "cache.hit" { foundHit = true } }
-	if !foundHit { t.Fatal("cache retrieval was not recorded") }
+	for _, event := range second.LastJourney.Events {
+		if event.Type == "cache.hit" {
+			foundHit = true
+		}
+	}
+	if !foundHit {
+		t.Fatal("cache retrieval was not recorded")
+	}
 }
 
 func TestPOSTJourneyRedactsSubmittedValues(t *testing.T) {
@@ -322,9 +332,119 @@ func TestPOSTJourneyRedactsSubmittedValues(t *testing.T) {
 	session.DisablePrefetch()
 	_, _ = session.Navigate(context.Background(), "mailweb://demo.local/")
 	state, err := session.SubmitForm(context.Background(), "POST", "/", map[string]string{"secret": "never-log-me"})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	encoded := prettyJSON(state.LastJourney.Events)
-	if strings.Contains(encoded, "never-log-me") || !strings.Contains(encoded, `"values": "redacted"`) { t.Fatalf("unsafe journey metadata: %s", encoded) }
+	if strings.Contains(encoded, "never-log-me") || !strings.Contains(encoded, `"values": "redacted"`) {
+		t.Fatalf("unsafe journey metadata: %s", encoded)
+	}
+}
+
+type stationeryTransport struct {
+	template TemplateDefinition
+	requests []MailWebRequest
+}
+
+func (transport *stationeryTransport) Exchange(_ context.Context, request MailWebRequest) (MailWebResponse, error) {
+	transport.requests = append(transport.requests, request)
+	document := &MailWebDocument{Title: "Page", Body: []Node{}, Template: transport.template.ID, TemplateVersion: transport.template.Version, Slots: map[string][]Node{"content": {{Type: "heading", Level: 2, Text: "Inserted letter"}}}}
+	response := MailWebResponse{MailWeb: request.MailWeb, RequestID: request.ID, Status: 200, Document: document}
+	if !strings.Contains(request.Headers["mailweb-stationery"], transport.template.Version) {
+		response.Templates = []TemplateDefinition{transport.template}
+	}
+	return response, nil
+}
+
+func testStationery() TemplateDefinition {
+	document := MailWebDocument{Title: "Stationery", Body: []Node{{Type: "heading", Level: 1, Text: "Dear Internet"}, {Type: "nav", Label: "Main", Items: []NavItem{{Label: "Home", Href: "/"}, {Label: "About", Href: "/about"}}}, {Type: "slot", Name: "content"}, {Type: "paragraph", Text: "Footer"}}, Presentation: &Presentation{Accent: "#315C45"}}
+	return TemplateDefinition{ID: "dear-internet/site", Version: templateVersion(document), Document: document}
+}
+
+func TestStationeryFirstDeliveryCompositionAndReuse(t *testing.T) {
+	transport := &stationeryTransport{template: testStationery()}
+	session := NewBrowserSession(transport, "test")
+	session.DisablePrefetch()
+	first, err := session.Navigate(context.Background(), "mailweb://demo.local/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Stationery) != 1 || len(first.Current.Response.Document.Body) != 4 || first.Current.Response.Document.Body[2].Text != "Inserted letter" || first.Current.StationeryStatus == "" {
+		t.Fatalf("first composition failed: %#v", first)
+	}
+	second, err := session.Navigate(context.Background(), "mailweb://demo.local/about")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.requests) != 2 || !strings.Contains(transport.requests[1].Headers["mailweb-stationery"], transport.template.Version) || len(second.Current.RawResponse.Templates) != 0 {
+		t.Fatalf("stationery was not reused: %#v", transport.requests)
+	}
+	if second.Current.Response.Document.Presentation.Accent != "#315C45" {
+		t.Fatal("template presentation did not survive composition")
+	}
+}
+
+func TestStationeryValidationAndMissingBehavior(t *testing.T) {
+	template := testStationery()
+	request, _ := NewRequest("mailweb://demo.local/")
+	response := MailWebResponse{MailWeb: "0.4", RequestID: request.ID, Status: 200, Document: &MailWebDocument{Title: "Page", Body: []Node{}, Template: template.ID, TemplateVersion: template.Version, Slots: map[string][]Node{"unknown": {{Type: "paragraph", Text: "lost"}}}}, Templates: []TemplateDefinition{template}}
+	if err := ValidateResponse(request, response); err != nil {
+		t.Fatal(err)
+	}
+	session := NewBrowserSession(&stationeryTransport{template: template}, "test")
+	journey := newJourney(request.URI, "GET", "test")
+	if _, err := session.prepareResponse(response, request.URI, journey); err == nil || !strings.Contains(err.Error(), "unknown stationery slot") {
+		t.Fatalf("unknown slot was accepted: %v", err)
+	}
+	missing := response
+	missing.Templates = nil
+	missing.Document.Slots = map[string][]Node{"content": {}}
+	empty := NewBrowserSession(&fakeTransport{}, "test")
+	if _, err := empty.prepareResponse(missing, request.URI, journey); !isMissingStationery(err) {
+		t.Fatalf("missing stationery did not fail safely: %v", err)
+	}
+	bad := template
+	bad.Version = "sha256:" + strings.Repeat("0", 64)
+	response.Templates = []TemplateDefinition{bad}
+	if ValidateResponse(request, response) == nil {
+		t.Fatal("mismatched content identity was accepted")
+	}
+}
+
+func TestTerminalRendersNavAsNavigation(t *testing.T) {
+	var output bytes.Buffer
+	response := MailWebResponse{Document: &MailWebDocument{Body: []Node{{Type: "nav", Label: "Main navigation", Items: []NavItem{{Label: "Home", Href: "/"}, {Label: "About", Href: "/about"}}}}}}
+	links := RenderTerminal(&output, response)
+	if len(links) != 2 || links[1].Href != "/about" || !strings.Contains(output.String(), "Main navigation") {
+		t.Fatalf("terminal nav failed: %s %#v", output.String(), links)
+	}
+}
+
+func TestNavAndSlotProtocolValidation(t *testing.T) {
+	if err := validateNode(Node{Type: "nav", Label: "Main", Items: []NavItem{{Label: "Home", Href: "/"}}}); err != nil {
+		t.Fatalf("valid nav rejected: %v", err)
+	}
+	if validateNode(Node{Type: "nav", Label: "Main", Items: []NavItem{{Label: "Bad", Href: "javascript:alert(1)"}}}) == nil {
+		t.Fatal("unsafe nav item accepted")
+	}
+	if err := validateNode(Node{Type: "slot", Name: "content"}); err != nil {
+		t.Fatalf("valid slot rejected: %v", err)
+	}
+	if validateNode(Node{Type: "slot", Name: "bad slot"}) == nil {
+		t.Fatal("malformed slot accepted")
+	}
+}
+
+func TestNavItemsParticipateInPrEmail(t *testing.T) {
+	transport := &fakeTransport{documents: map[string][]Node{"/": {{Type: "nav", Label: "Main", Items: []NavItem{{Label: "About", Href: "/about"}}}}, "/about": {}}}
+	session := NewBrowserSession(transport, "test")
+	if _, err := session.Navigate(context.Background(), "mailweb://demo.local/"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, time.Second, func() bool { return requestCount(transport) == 2 })
+	if transport.requests[1].URI != "mailweb://demo.local/about" {
+		t.Fatalf("nav destination was not pre-mailed: %#v", transport.requests)
+	}
 }
 
 func requestCount(transport *fakeTransport) int {

@@ -28,6 +28,13 @@ func RenderTerminal(writer io.Writer, response MailWebResponse) []Navigation {
 		case "link", "button":
 			navigation = append(navigation, Navigation{Label: node.Label, Href: node.Href})
 			fmt.Fprintf(writer, "[%d] %s\n\n", len(navigation), node.Label)
+		case "nav":
+			fmt.Fprintln(writer, node.Label)
+			for _, item := range node.Items {
+				navigation = append(navigation, Navigation{Label: item.Label, Href: item.Href})
+				fmt.Fprintf(writer, "[%d] %s\n", len(navigation), item.Label)
+			}
+			fmt.Fprintln(writer)
 		case "image":
 			alt := strings.TrimSpace(node.Alt)
 			if alt == "" {

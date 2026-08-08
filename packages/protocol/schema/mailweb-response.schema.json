@@ -6,13 +6,21 @@
   "additionalProperties": false,
   "required": ["mailweb", "request_id", "status", "document"],
   "properties": {
-    "mailweb": { "const": "0.3" },
+    "mailweb": { "const": "0.4" },
     "request_id": {
       "type": "string",
       "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
       "description": "The exact id from the corresponding MailWebRequest."
     },
     "status": { "type": "integer", "minimum": 100, "maximum": 599 },
-    "document": { "$ref": "mailweb-document.schema.json" }
+    "document": { "$ref": "mailweb-document.schema.json" },
+    "templates": {
+      "type": "array", "maxItems": 16,
+      "items": { "type": "object", "additionalProperties": false, "required": ["id", "version", "document"], "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$" },
+        "version": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "document": { "allOf": [{ "$ref": "mailweb-document.schema.json" }, { "not": { "required": ["template"] } }] }
+      } }
+    }
   }
 }

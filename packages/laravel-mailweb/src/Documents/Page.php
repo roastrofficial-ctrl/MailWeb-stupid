@@ -11,6 +11,9 @@ final class Page implements JsonSerializable
     private array $body = [];
 	/** @var array<string, string>|null */
 	private ?array $presentation = null;
+	private ?Template $template = null;
+	/** @var array<string, array<int, array<string, mixed>>> */
+	private array $slots = [];
 
     public function __construct(public readonly string $title, public readonly int $status = 200)
     {
@@ -37,6 +40,46 @@ final class Page implements JsonSerializable
     {
         return $this->navigation('link', $label, $href);
     }
+
+	/** @param array<int, array{0:string,1:string}|array{label:string,href:string}> $items */
+	public function nav(string $label, array $items): self
+	{
+		$normalized = [];
+		foreach ($items as $item) { $itemLabel = $item['label'] ?? $item[0] ?? ''; $href = $item['href'] ?? $item[1] ?? ''; if ($itemLabel === '' || $href === '') { throw new InvalidArgumentException('Navigation items require labels and references.'); } $normalized[] = ['label' => $itemLabel, 'href' => $href]; }
+		if ($label === '' || $normalized === []) { throw new InvalidArgumentException('Navigation requires an accessible label and items.'); }
+		return $this->node(['type' => 'nav', 'label' => $label, 'items' => $normalized]);
+	}
+
+	public function slotPlaceholder(string $name): self
+	{
+		if (! preg_match('/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/', $name)) { throw new InvalidArgumentException('Invalid slot name.'); }
+		return $this->node(['type' => 'slot', 'name' => $name]);
+	}
+
+	public function template(Template $template): self { $this->template = $template; return $this; }
+
+	/** @param array<int, array<string, mixed>>|Page $nodes */
+	public function slot(string $name, array|Page $nodes): self
+	{
+		if (! preg_match('/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/', $name)) { throw new InvalidArgumentException('Invalid slot name.'); }
+		$serialized = $nodes instanceof Page ? $nodes->body() : $nodes;
+		$this->slots[$name] = $serialized;
+		return $this;
+	}
+
+	/** @return array<int, array<string, mixed>> */
+	public function body(): array { return $this->body; }
+	public function templateDefinition(): ?Template { return $this->template; }
+	/** @return array<string, mixed> */
+	public function composedDocument(): array
+	{
+		if ($this->template === null) { return $this->jsonSerialize(); }
+		$document = $this->template->document->jsonSerialize(); $body = [];
+		foreach ($document['body'] as $node) { if (($node['type'] ?? '') === 'slot') { array_push($body, ...($this->slots[$node['name']] ?? [])); } else { $body[] = $node; } }
+		$document['title'] = $this->title; $document['body'] = $body;
+		if ($this->presentation !== null) { $document['presentation'] = array_merge($document['presentation'] ?? [], $this->presentation); }
+		return $document;
+	}
 
     public function button(string $label, string $href, string $variant = 'normal'): self
     {
@@ -87,6 +130,11 @@ final class Page implements JsonSerializable
 
     public function jsonSerialize(): array
     {
+		if ($this->template !== null) {
+			$result = ['title' => $this->title, 'body' => [], 'template' => $this->template->id, 'template_version' => $this->template->version, 'slots' => $this->slots];
+			if ($this->presentation !== null) { $result['presentation'] = $this->presentation; }
+			return $result;
+		}
 		$result = ['title' => $this->title, 'body' => $this->body];
 		if ($this->presentation !== null) { $result['presentation'] = $this->presentation; }
 		return $result;

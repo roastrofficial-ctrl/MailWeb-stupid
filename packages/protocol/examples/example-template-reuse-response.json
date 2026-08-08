@@ -1,0 +1,12 @@
+{
+  "mailweb": "0.4",
+  "request_id": "01J00000000000000000000001",
+  "status": 200,
+  "document": {
+    "title": "About",
+    "body": [],
+    "template": "dear-internet/site",
+    "template_version": "sha256:864ce57e6bde2da24a85cd1c8ff9e1ec908409ad51c66ced5dff1a5e3b8095be",
+    "slots": {"content": [{"type": "heading", "level": 1, "text": "About"}, {"type": "paragraph", "text": "This reply reused stationery already on file."}]}
+  }
+}

@@ -1,8 +1,8 @@
-# MailWeb Protocol v0.3
+# MailWeb Protocol v0.4
 
 ## Status
 
-This document defines the experimental MailWeb Protocol v0.3. The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** carry their usual RFC meanings.
+This document defines the experimental MailWeb Protocol v0.4. The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** carry their usual RFC meanings.
 
 ## 1. Scope and transport independence
 
@@ -12,7 +12,7 @@ Messages are UTF-8 JSON objects. The canonical [request](../packages/protocol/sc
 
 ## 2. Requests
 
-Every request contains `mailweb: "0.3"`, a fresh uppercase ULID `id`, `method`, an absolute `mailweb://` URI, and string-valued `headers`.
+Every request contains `mailweb: "0.4"`, a fresh uppercase ULID `id`, `method`, an absolute `mailweb://` URI, and string-valued `headers`.
 
 ### 2.1 GET and query parameters
 
@@ -20,7 +20,7 @@ GET retrieves a document and MUST NOT contain `body`. Query parameters belong in
 
 ```json
 {
-  "mailweb": "0.3",
+  "mailweb": "0.4",
   "id": "01J00000000000000000000000",
   "method": "GET",
   "uri": "mailweb://demo.local/search?q=internet",
@@ -32,11 +32,11 @@ The query is part of resource identity. Publishers parse it from `uri`; no paral
 
 ### 2.2 POST and request bodies
 
-POST submits application data. In v0.3, `body` is a JSON object and is REQUIRED for POST. A JSON body SHOULD be described by `content-type: application/json`:
+POST submits application data. In v0.4, `body` is a JSON object and is REQUIRED for POST. A JSON body SHOULD be described by `content-type: application/json`:
 
 ```json
 {
-  "mailweb": "0.3",
+  "mailweb": "0.4",
   "id": "01J00000000000000000000000",
   "method": "POST",
   "uri": "mailweb://demo.local/hello",
@@ -45,17 +45,17 @@ POST submits application data. In v0.3, `body` is a JSON object and is REQUIRED 
 }
 ```
 
-Headers are MailWeb application metadata, not SMTP or HTTP headers. v0.3 defines no cookies, sessions, or authentication.
+Headers are MailWeb application metadata, not SMTP or HTTP headers. A client MAY advertise stationery already held in memory using `mailweb-stationery`, whose value is a JSON object mapping template IDs to exact versions. This is an application optimization hint, not carrier state. v0.4 defines no cookies, sessions, or authentication.
 
 ## 3. Responses and correlation
 
-A response contains `mailweb: "0.3"`, `request_id`, an integer `status` from 100 through 599, and a `document`. `request_id` MUST exactly match the request `id`. Status describes the MailWeb result, not carrier delivery. A document is required even for errors.
+A response contains `mailweb: "0.4"`, `request_id`, an integer `status` from 100 through 599, and a `document`. `request_id` MUST exactly match the request `id`. Status describes the MailWeb result, not carrier delivery. A document is required even for errors.
 
 ## 4. Documents
 
 A document contains a plain-text `title` and ordered `body`. Text is never markup. Renderers MUST escape it and MUST NOT interpret HTML, Markdown, JavaScript, templates, or event handlers.
 
-v0.3 supports:
+v0.4 supports:
 
 - `heading`: `level` 1–6 and plain `text`.
 - `paragraph`: plain `text`.
@@ -63,6 +63,8 @@ v0.3 supports:
 - `image`: URI-reference `src` and plain `alt`.
 - `button`: navigational `label` and `href`; it executes no code and submits no data.
 - `form`: semantic input and submission metadata described below.
+- `nav`: an accessible label and ordered `{label, href}` items. Items navigate through MailWeb like links, and renderers SHOULD identify the current destination.
+- `slot`: a template-only named insertion point. It is invalid in ordinary composed documents and response slot content.
 
 References resolve against the request URI. Clients MUST reject executable schemes and MAY restrict external resources.
 
@@ -84,7 +86,7 @@ References resolve against the request URI. Clients MUST reject executable schem
 }
 ```
 
-v0.3 permits GET and POST forms and `text` fields only. Field names within a form MUST be unique. The renderer owns native controls; publishers supply no HTML or scripts.
+v0.4 permits GET and POST forms and `text` fields only. Field names within a form MUST be unique. The renderer owns native controls; publishers supply no HTML or scripts.
 
 On GET submission, the client URI-encodes field values into the action URI query and sends a bodyless GET. On POST submission, it sends field names and string values as the request JSON body. Form submissions use the selected transport exactly like other navigation.
 
@@ -110,15 +112,31 @@ Headings MAY suggest `variant: "display"`, images MAY suggest `variant: "hero"`,
 
 Clients MAY ignore or override any presentation hint. They MUST NOT treat hints as CSS, URLs, markup, executable content, or permission to fetch another resource. The publisher owns the message; the reader owns the screen.
 
+### 4.3 Templates (“stationery”)
+
+A response document MAY name a `template`, its exact `template_version`, and a `slots` object. The version is `sha256:` followed by the lowercase SHA-256 of the compact UTF-8 JSON serialization of the template `document`. Clients cache by the `(id, version)` pair; a different version of the same ID is not interchangeable.
+
+On first delivery, top-level `templates` MAY enclose a matching definition containing `id`, `version`, and one complete semantic `document`. Template documents cannot reference templates. They contain ordinary safe nodes plus named `slot` nodes and use the ordinary size limits.
+
+Composition is deterministic:
+
+1. Validate definitions and their content-derived versions, then file them in session memory.
+2. Locate the exact referenced ID and version. If absent, retain the correspondence and report `MISSING STATIONERY`; v0.4 performs no automatic fetch.
+3. Reject supplied slot names not declared by the template. This prevents typos silently discarding content.
+4. Walk the template body in order, replacing each slot with its supplied nodes. A missing slot inserts zero nodes. Slot content cannot contain slots.
+5. Render the resulting ordinary semantic document.
+
+Template Presentation Intent supplies defaults; response properties override those defaults; reader overrides remain authoritative. No inheritance, nested templates, loops, conditions, expressions, HTML, CSS, or executable code exist. Human-facing clients may call templates “stationery”; wire fields retain the technical word `template`.
+
 ## 5. Processing and safety
 
 The client constructs a valid request; a transport carries it unchanged; the publisher routes method and URI, creates a correlated response, and a transport returns it unchanged. The client validates version, correlation, status, and every document node before rendering.
 
-“Private” describes the messaging model, not a v0.3 security guarantee. Deployments obtain confidentiality, identity, integrity, and access control from their environment. Every publisher document remains untrusted.
+“Private” describes the messaging model, not a v0.4 security guarantee. Deployments obtain confidentiality, identity, integrity, and access control from their environment. Every publisher document remains untrusted.
 
 ## 6. Compatibility
 
-v0.1 defined bodyless GET only and five non-form nodes. v0.2 added POST, JSON bodies, query semantics, and forms. v0.3 adds only optional Presentation Intent and node variants. A v0.3 document without those optional fields has the same semantic representation as v0.2. Implementations MAY continue accepting valid older request/response pairs but MUST reject mixed-version pairs and unknown fields for the declared version.
+v0.1 defined bodyless GET only and five non-form nodes. v0.2 added POST, JSON bodies, query semantics, and forms. v0.3 added optional Presentation Intent and node variants. v0.4 adds semantic navigation and reusable templates. Publishers MAY expand stationery into complete documents for older clients. Implementations MAY accept valid older pairs but MUST reject mixed-version pairs and unknown fields for the declared version.
 
 ## 7. Experimental client behavior: prEmail
 

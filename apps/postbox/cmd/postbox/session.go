@@ -14,20 +14,22 @@ import (
 const defaultCacheTTL = 60 * time.Second
 
 type NavigationResult struct {
-	JourneyID          string          `json:"journey_id"`
-	URI                string          `json:"uri"`
-	Request            MailWebRequest  `json:"request"`
-	Response           MailWebResponse `json:"response"`
-	Transport          string          `json:"transport"`
-	Delivery           string          `json:"delivery"`
-	RequestSentAt      time.Time       `json:"request_sent_at"`
-	ResponseReceivedAt time.Time       `json:"response_received_at"`
-	RoundTripMS        int64           `json:"round_trip_ms"`
-	PrefetchedAt       *time.Time      `json:"prefetched_at,omitempty"`
-	OpenedAt           time.Time       `json:"opened_at"`
-	NavigationMS       int64           `json:"navigation_ms"`
-	ClientMailbox      string          `json:"client_mailbox,omitempty"`
-	PublisherMailbox   string          `json:"publisher_mailbox,omitempty"`
+	JourneyID          string           `json:"journey_id"`
+	URI                string           `json:"uri"`
+	Request            MailWebRequest   `json:"request"`
+	Response           MailWebResponse  `json:"response"`
+	RawResponse        *MailWebResponse `json:"raw_response,omitempty"`
+	StationeryStatus   string           `json:"stationery_status,omitempty"`
+	Transport          string           `json:"transport"`
+	Delivery           string           `json:"delivery"`
+	RequestSentAt      time.Time        `json:"request_sent_at"`
+	ResponseReceivedAt time.Time        `json:"response_received_at"`
+	RoundTripMS        int64            `json:"round_trip_ms"`
+	PrefetchedAt       *time.Time       `json:"prefetched_at,omitempty"`
+	OpenedAt           time.Time        `json:"opened_at"`
+	NavigationMS       int64            `json:"navigation_ms"`
+	ClientMailbox      string           `json:"client_mailbox,omitempty"`
+	PublisherMailbox   string           `json:"publisher_mailbox,omitempty"`
 }
 
 type PrefetchState struct {
@@ -40,16 +42,18 @@ type PrefetchState struct {
 }
 
 type BrowserState struct {
-	Current           *NavigationResult `json:"current"`
-	CanGoBack         bool              `json:"can_go_back"`
-	CanGoForward      bool              `json:"can_go_forward"`
-	SelectedTransport string            `json:"selected_transport"`
-	ClientMailbox     string            `json:"client_mailbox,omitempty"`
-	Prefetch          PrefetchState     `json:"premail"`
-	Notice            string            `json:"notice,omitempty"`
-	Archive           []ArchiveItem     `json:"archive"`
-	Journeys          []Journey         `json:"journeys"`
-	LastJourney       *Journey          `json:"last_journey,omitempty"`
+	Current                *NavigationResult `json:"current"`
+	CanGoBack              bool              `json:"can_go_back"`
+	CanGoForward           bool              `json:"can_go_forward"`
+	SelectedTransport      string            `json:"selected_transport"`
+	ClientMailbox          string            `json:"client_mailbox,omitempty"`
+	Prefetch               PrefetchState     `json:"premail"`
+	Notice                 string            `json:"notice,omitempty"`
+	Archive                []ArchiveItem     `json:"archive"`
+	Journeys               []Journey         `json:"journeys"`
+	LastJourney            *Journey          `json:"last_journey,omitempty"`
+	Stationery             []StationeryFile  `json:"stationery"`
+	RetainedCorrespondence *MailWebResponse  `json:"retained_correspondence,omitempty"`
 }
 
 type ArchiveItem struct {
@@ -70,20 +74,22 @@ type cacheEntry struct {
 // BrowserSession owns navigation, history and experimental prEmail state.
 // Transport remains the only boundary that knows how messages are carried.
 type BrowserSession struct {
-	mu               sync.Mutex
-	transport        Transport
-	transportName    string
-	clientMailbox    string
-	publisherMailbox string
-	history          []NavigationResult
-	index            int
-	cache            map[string]cacheEntry
-	inflight         map[string]chan struct{}
-	cacheTTL         time.Duration
-	prefetch         PrefetchState
-	lastNotice       string
-	prefetchEnabled  bool
-	journeys         []Journey
+	mu                     sync.Mutex
+	transport              Transport
+	transportName          string
+	clientMailbox          string
+	publisherMailbox       string
+	history                []NavigationResult
+	index                  int
+	cache                  map[string]cacheEntry
+	inflight               map[string]chan struct{}
+	cacheTTL               time.Duration
+	prefetch               PrefetchState
+	lastNotice             string
+	prefetchEnabled        bool
+	journeys               []Journey
+	stationery             map[string]StationeryFile
+	retainedCorrespondence *MailWebResponse
 }
 
 func NewBrowserSession(transport Transport, transportName string) *BrowserSession {
@@ -99,6 +105,7 @@ func NewBrowserSession(transport Transport, transportName string) *BrowserSessio
 		transport: transport, transportName: transportName, clientMailbox: mailbox, publisherMailbox: publisher, index: -1,
 		cache: map[string]cacheEntry{}, inflight: map[string]chan struct{}{}, cacheTTL: defaultCacheTTL,
 		prefetchEnabled: true,
+		stationery:      map[string]StationeryFile{},
 		prefetch:        PrefetchState{Phase: "idle", Message: "prEmail: waiting for addresses."},
 	}
 }
@@ -260,7 +267,11 @@ func (session *BrowserSession) navigate(ctx context.Context, method, uri string,
 		result.NavigationMS = time.Since(started).Milliseconds()
 	}
 	journey.add("document.ready", "semantic document released to renderer", nil)
-	completed := journey.finish(journeyOutcome(nil, result.Response.Status), result.Delivery, &result.Request, &result.Response, result.RoundTripMS, result.NavigationMS)
+	journeyResponse := &result.Response
+	if result.RawResponse != nil {
+		journeyResponse = result.RawResponse
+	}
+	completed := journey.finish(journeyOutcome(nil, result.Response.Status), result.Delivery, &result.Request, journeyResponse, result.RoundTripMS, result.NavigationMS)
 	result.JourneyID = completed.ID
 	session.storeJourney(completed)
 	session.mu.Lock()
@@ -292,6 +303,16 @@ func (session *BrowserSession) exchange(ctx context.Context, method, uri string,
 	if err != nil {
 		return NavigationResult{}, err
 	}
+	session.mu.Lock()
+	known := make(map[string]string, len(session.stationery))
+	for _, file := range session.stationery {
+		known[file.ID] = file.Version
+	}
+	session.mu.Unlock()
+	if len(known) > 0 {
+		encoded, _ := json.Marshal(known)
+		request.Headers["mailweb-stationery"] = string(encoded)
+	}
 	journey.add("request.created", "MailWebRequest created", map[string]string{"request_id": request.ID, "protocol": request.MailWeb})
 	sent := time.Now().UTC()
 	response, err := session.transport.Exchange(withJourneyObserver(ctx, journey), request)
@@ -305,8 +326,28 @@ func (session *BrowserSession) exchange(ctx context.Context, method, uri string,
 		return NavigationResult{}, err
 	}
 	journey.add("response.validated", "protocol and correlation validated", nil)
+	rawResponse := response
+	response, err = session.prepareResponse(response, uri, journey)
+	if err != nil {
+		if isMissingStationery(err) {
+			session.mu.Lock()
+			retained := rawResponse
+			session.retainedCorrespondence = &retained
+			session.mu.Unlock()
+		}
+		return NavigationResult{}, err
+	}
+	stationeryStatus := ""
+	if rawResponse.Document.Template != "" {
+		stationeryStatus = "Using stationery already in your Postbox."
+		for _, template := range rawResponse.Templates {
+			if template.ID == rawResponse.Document.Template && template.Version == rawResponse.Document.TemplateVersion {
+				stationeryStatus = "New stationery received from " + mustMailWebHost(uri) + "."
+			}
+		}
+	}
 	return NavigationResult{
-		URI: uri, Request: request, Response: response, Transport: session.transportName, Delivery: "live",
+		URI: uri, Request: request, Response: response, RawResponse: &rawResponse, StationeryStatus: stationeryStatus, Transport: session.transportName, Delivery: "live",
 		RequestSentAt: sent, ResponseReceivedAt: received, RoundTripMS: received.Sub(sent).Milliseconds(),
 		OpenedAt: received, NavigationMS: received.Sub(sent).Milliseconds(), ClientMailbox: session.clientMailbox,
 		PublisherMailbox: session.publisherMailbox,
@@ -352,30 +393,41 @@ func (session *BrowserSession) discover(current NavigationResult) {
 	seen := map[string]bool{}
 	base, _ := url.Parse(current.URI)
 	for _, node := range current.Response.Document.Body {
-		if node.Type != "link" {
-			continue
+		references := []string{}
+		if node.Type == "link" {
+			references = append(references, node.Href)
 		}
-		resolved, err := resolveMailWebReference(current.URI, node.Href)
-		if err != nil {
-			continue
+		if node.Type == "nav" {
+			for _, item := range node.Items {
+				references = append(references, item.Href)
+			}
 		}
-		parsed, _ := url.Parse(resolved)
-		if !strings.EqualFold(parsed.Host, base.Host) || resolved == current.URI || seen[resolved] {
-			continue
+		for _, reference := range references {
+			resolved, err := resolveMailWebReference(current.URI, reference)
+			if err != nil {
+				continue
+			}
+			parsed, _ := url.Parse(resolved)
+			if !strings.EqualFold(parsed.Host, base.Host) || resolved == current.URI || seen[resolved] {
+				continue
+			}
+			seen[resolved] = true
+			session.mu.Lock()
+			entry, cached := session.cache[resolved]
+			_, active := session.inflight[resolved]
+			if cached && time.Now().After(entry.expiresAt) {
+				delete(session.cache, resolved)
+				cached = false
+			}
+			if !cached && !active {
+				session.inflight[resolved] = make(chan struct{})
+				targets = append(targets, resolved)
+			}
+			session.mu.Unlock()
+			if len(targets) == 3 {
+				break
+			}
 		}
-		seen[resolved] = true
-		session.mu.Lock()
-		entry, cached := session.cache[resolved]
-		_, active := session.inflight[resolved]
-		if cached && time.Now().After(entry.expiresAt) {
-			delete(session.cache, resolved)
-			cached = false
-		}
-		if !cached && !active {
-			session.inflight[resolved] = make(chan struct{})
-			targets = append(targets, resolved)
-		}
-		session.mu.Unlock()
 		if len(targets) == 3 {
 			break
 		}
@@ -477,7 +529,7 @@ func plural(count int, one, many string) string {
 	return jsonNumber(count) + " " + word
 }
 func jsonNumber(value int) string { encoded, _ := json.Marshal(value); return string(encoded) }
-func jsonBool(value bool) string { encoded, _ := json.Marshal(value); return string(encoded) }
+func jsonBool(value bool) string  { encoded, _ := json.Marshal(value); return string(encoded) }
 
 func canonicalMailWebURI(raw string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
@@ -507,6 +559,11 @@ func (session *BrowserSession) stateLocked() BrowserState {
 		last := state.Journeys[len(state.Journeys)-1]
 		state.LastJourney = &last
 	}
+	for _, file := range session.stationery {
+		state.Stationery = append(state.Stationery, file)
+	}
+	state.RetainedCorrespondence = session.retainedCorrespondence
+	sort.Slice(state.Stationery, func(i, j int) bool { return state.Stationery[i].ReceivedAt.After(state.Stationery[j].ReceivedAt) })
 	seen := map[string]bool{}
 	if state.Current != nil {
 		state.Archive = append(state.Archive, archiveItem(*state.Current, true))
@@ -529,25 +586,39 @@ func (session *BrowserSession) storeJourney(journey Journey) {
 
 func appendCappedJourney(journeys []Journey, journey Journey) []Journey {
 	journeys = append(journeys, journey)
-	if len(journeys) > 50 { journeys = journeys[len(journeys)-50:] }
+	if len(journeys) > 50 {
+		journeys = journeys[len(journeys)-50:]
+	}
 	return journeys
 }
 
 func journeyOutcome(err error, status int) string {
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "timed out") { return "timeout" }
+		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "timed out") {
+			return "timeout"
+		}
 		return "damaged"
 	}
-	if status >= 200 && status < 300 { return "delivered" }
-	if status == 404 { return "returned" }
-	if status >= 500 { return "publisher error" }
+	if status >= 200 && status < 300 {
+		return "delivered"
+	}
+	if status == 404 {
+		return "returned"
+	}
+	if status >= 500 {
+		return "publisher error"
+	}
 	return "response received"
 }
 
 func safeJourneyError(err error) string {
-	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "timed out") { return "timeout waiting for correlated response" }
+	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "timed out") {
+		return "timeout waiting for correlated response"
+	}
 	return err.Error()
 }
+
+func mustMailWebHost(uri string) string { parsed, _ := url.Parse(uri); return parsed.Host }
 
 func archiveItem(result NavigationResult, current bool) ArchiveItem {
 	title := result.URI

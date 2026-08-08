@@ -12,8 +12,16 @@
       "maxItems": 10000,
       "items": { "$ref": "#/$defs/node" }
     },
-    "presentation": { "$ref": "#/$defs/presentation" }
+    "presentation": { "$ref": "#/$defs/presentation" },
+    "template": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$" },
+    "template_version": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "slots": { "type": "object", "maxProperties": 64, "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$" }, "additionalProperties": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/contentNode" } } }
   },
+  "allOf": [{
+    "if": { "required": ["template"] },
+    "then": { "required": ["template_version", "slots"], "properties": { "body": { "maxItems": 0 } } },
+    "else": { "not": { "anyOf": [{ "required": ["template_version"] }, { "required": ["slots"] }] } }
+  }],
   "$defs": {
     "node": {
       "oneOf": [
@@ -22,8 +30,28 @@
         { "$ref": "#/$defs/link" },
         { "$ref": "#/$defs/image" },
         { "$ref": "#/$defs/button" },
-        { "$ref": "#/$defs/form" }
+        { "$ref": "#/$defs/form" },
+        { "$ref": "#/$defs/nav" },
+        { "$ref": "#/$defs/slot" }
       ]
+    },
+    "contentNode": {
+      "oneOf": [
+        { "$ref": "#/$defs/heading" }, { "$ref": "#/$defs/paragraph" }, { "$ref": "#/$defs/link" },
+        { "$ref": "#/$defs/image" }, { "$ref": "#/$defs/button" }, { "$ref": "#/$defs/form" }, { "$ref": "#/$defs/nav" }
+      ]
+    },
+    "navItem": { "type": "object", "additionalProperties": false, "required": ["label", "href"], "properties": { "label": { "type": "string", "minLength": 1 }, "href": { "type": "string", "format": "uri-reference", "minLength": 1 } } },
+    "nav": {
+      "type": "object", "additionalProperties": false, "required": ["type", "label", "items"],
+      "properties": {
+        "type": { "const": "nav" }, "label": { "type": "string", "minLength": 1 },
+        "items": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "$ref": "#/$defs/navItem" } }
+      }
+    },
+    "slot": {
+      "type": "object", "additionalProperties": false, "required": ["type", "name"],
+      "properties": { "type": { "const": "slot" }, "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$" } }
     },
     "heading": {
       "type": "object",

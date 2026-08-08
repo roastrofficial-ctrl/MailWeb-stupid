@@ -4,11 +4,14 @@ namespace MailWeb\Laravel;
 
 use MailWeb\Laravel\Documents\Page;
 use MailWeb\Laravel\Documents\TextField;
+use MailWeb\Laravel\Documents\Template;
 use MailWeb\Laravel\Routing\MailWebRoute;
 use MailWeb\Laravel\Routing\MailWebRouter;
 
-final readonly class MailWebManager
+final class MailWebManager
 {
+	/** @var array<string, Template> */
+	private array $templates = [];
     public function __construct(private MailWebRouter $router) {}
 
     public function get(string $uri, callable|array|string $action): MailWebRoute
@@ -30,4 +33,11 @@ final readonly class MailWebManager
     {
         return new TextField($name, $label, $placeholder, $required);
     }
+
+	public function template(string $id, ?callable $definition = null): Template
+	{
+		if ($definition !== null) { $page = $definition(); if (! $page instanceof Page) { throw new \InvalidArgumentException('Template definitions must return a MailWeb Page.'); } return $this->templates[$id] = new Template($id, $page); }
+		if (! isset($this->templates[$id])) { throw new \InvalidArgumentException("Unknown MailWeb template {$id}."); }
+		return $this->templates[$id];
+	}
 }

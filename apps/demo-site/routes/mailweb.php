@@ -3,52 +3,55 @@
 use MailWeb\Laravel\Facades\MailWeb;
 use MailWeb\Laravel\Http\MailWebRequest;
 
-MailWeb::get('/', fn () => MailWeb::page('Dear Internet')
+$stationery = MailWeb::template('dear-internet/site', fn () => MailWeb::page('Dear Internet stationery')
 	->presentation('#315C45', '#FFFDF8', '#17231C', '#F3EFE5', 'editorial', 'spacious', 'soft')
-    ->heading('Dear Internet', variant: 'display')
-    ->paragraph('This looks like a website. It is actually private correspondence.')
-    ->paragraph('Postbox did not HTTP GET this page from a web server. It wrote to a private email address and waited for this document to arrive in the reply.')
-    ->paragraph('Every heading, paragraph, link and button below was sealed inside that private message, then safely rendered by your MailWeb browser.')
+	->heading('Dear Internet', variant: 'display')
+	->nav('Main navigation', [['Home', '/'], ['About', '/about'], ['Hello', '/hello']])
+	->slotPlaceholder('content')
+	->paragraph('Sent as private correspondence. Typeset locally using stationery already filed by Postbox.'));
+
+$letter = fn (string $title) => MailWeb::page($title)->template($stationery);
+$content = fn (string $title) => MailWeb::page($title);
+
+MailWeb::get('/', fn () => $letter('Dear Internet')->slot('content', $content('Home')
+    ->heading('This looks like a website.')
+    ->paragraph("It isn't. Every word arrived as private correspondence.")
+    ->paragraph('This first reply also enclosed reusable semantic stationery: the identity, navigation and footer surrounding this letter.')
+    ->paragraph('Follow another address and the publisher will mail only its new content. Postbox already has the site-shaped paper.')
     ->button('Prove it was posted', '/proof', 'prominent')
-    ->link('Correspond with us', '/hello')
-    ->link('Inspect the private exchange', '/proof')
-    ->link('Why browse by correspondence?', '/why'));
+    ->link('Why browse by correspondence?', '/why')));
 
-MailWeb::get('/proof', fn () => MailWeb::page('You just clicked a link')
+MailWeb::get('/about', fn () => $letter('About this correspondence')->slot('content', $content('About')
+	->heading('The page did not mail its navigation again.')
+	->paragraph('This reply contains About-specific semantic nodes and a reference to dear-internet/site.')
+	->paragraph('Postbox found the matching stationery version on file, inserted this letter into its content slot, and rendered the complete page locally.')
+	->link('Return home', '/')));
+
+MailWeb::get('/proof', fn () => $letter('You just clicked a link')->slot('content', $content('Proof')
     ->heading('You just mailed a link.')
-    ->paragraph('That click did not navigate your HTTP browser to a web server. Postbox privately mailed this request:')
-    ->paragraph('GET mailweb://demo.local/proof')
-    ->paragraph('The demo MailWeb configured application opened the correspondence, routed the enclosed MailWeb request, and privately emailed this document back to your personal Postbox address.')
-    ->paragraph('Postbox opened the reply and rendered it as the page you are reading now. The Message Inspector shows both letters and their matching request ID.')
+    ->paragraph('Postbox privately mailed GET mailweb://demo.local/proof and received this content in the correlated reply.')
+    ->paragraph('The familiar header, navigation and footer came from stationery already in your Postbox—not from this page response.')
     ->button('Mail the same page again', '/proof')
-    ->link('Why turn browsing into private correspondence?', '/why'));
+    ->link('Why turn browsing into correspondence?', '/why')));
 
-MailWeb::get('/why', fn () => MailWeb::page('The Internet Is Not HTTP')
+MailWeb::get('/why', fn () => $letter('The Internet Is Not HTTP')->slot('content', $content('Why')
     ->heading('The Internet Is Not HTTP.')
-    ->paragraph('A web-style document does not have to arrive as an HTTP response. HTTP is one delivery mechanism, not the document itself.')
-    ->paragraph('MailWeb separates presentation from transport, then makes the transport conspicuously personal: every page view becomes private correspondence between you and an application.')
-    ->paragraph('This is not a claim that email is a sensible replacement for the Web. It is an absurd demonstration that the Web and HTTP are not the same idea.')
-    ->paragraph('You are browsing a demo MailWeb enabled Laravel application by exchanging private messages with it. That is the joke. It is also genuinely happening.')
-    ->link('Write privately to the home page', '/'));
+    ->paragraph('A web-style document does not have to arrive as an HTTP response. Presentation, reusable structure and transport are separable concerns.')
+    ->paragraph('MailWeb is deliberately absurd. Your computer is filing a correspondent’s stationery so their later private letters can masquerade as pages more efficiently.')
+    ->link('Write privately to the home page', '/')));
 
-MailWeb::get('/hello', fn () => MailWeb::page('An introduction')
+MailWeb::get('/hello', fn () => $letter('An introduction')->slot('content', $content('Hello')
     ->heading('A private introduction')
-    ->paragraph('This form is not about to POST over HTTP. Fill it in and Postbox will place your answer inside a private MailWeb message addressed to the demo MailWeb enabled Laravel application.')
-    ->paragraph("What name should we put in the letter?")
-    ->form('POST', '/hello', [
-        MailWeb::text(name: 'name', label: 'What should we call you?', placeholder: 'Your name', required: true),
-    ], 'Send private correspondence')
-    ->link('Return to your earlier correspondence', '/'));
+    ->paragraph('This form will place your answer inside a private MailWeb POST addressed to the Laravel publisher.')
+    ->form('POST', '/hello', [MailWeb::text('name', 'What should we call you?', 'Your name', true)], 'Send private correspondence')));
 
-MailWeb::post('/hello', function (MailWebRequest $request) {
+MailWeb::post('/hello', function (MailWebRequest $request) use ($letter, $content) {
     $submitted = $request->input('name', '');
     $name = is_string($submitted) ? trim(mb_substr($submitted, 0, 80)) : '';
     $name = $name !== '' ? $name : 'correspondent';
-
-    return MailWeb::page('A personal reply')
+    return $letter('A personal reply')->slot('content', $content('Reply')
         ->heading("Dear {$name},")
         ->paragraph('Lovely to correspond privately.')
-        ->paragraph('Your name arrived inside a POST request carried by private email. The demo MailWeb enabled Laravel application read it, generated this personal document, and emailed the response to your Postbox address.')
-        ->paragraph('No ordinary webpage form submission occurred. You sent application data through the post and received a web-style page in the reply.')
-        ->link('Write another private letter', '/hello');
+        ->paragraph('Your name arrived inside an emailed MailWeb POST. This personalised content came back using the same stationery already filed in your Postbox.')
+        ->link('Write another private letter', '/hello'));
 });

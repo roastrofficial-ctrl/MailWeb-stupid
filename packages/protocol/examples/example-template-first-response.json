@@ -1,0 +1,17 @@
+{
+  "mailweb": "0.4",
+  "request_id": "01J00000000000000000000000",
+  "status": 200,
+  "templates": [{
+    "id": "dear-internet/site",
+    "version": "sha256:864ce57e6bde2da24a85cd1c8ff9e1ec908409ad51c66ced5dff1a5e3b8095be",
+    "document": {"title": "Dear Internet stationery", "body": [{"type": "slot", "name": "content"}]}
+  }],
+  "document": {
+    "title": "Home",
+    "body": [],
+    "template": "dear-internet/site",
+    "template_version": "sha256:864ce57e6bde2da24a85cd1c8ff9e1ec908409ad51c66ced5dff1a5e3b8095be",
+    "slots": {"content": [{"type": "heading", "level": 1, "text": "Home"}]}
+  }
+}
