@@ -1,6 +1,6 @@
-# MailWeb Protocol v0.2
+# MailWeb Protocol v0.3
 
-MailWeb v0.2 defines GET and POST requests, correlated responses, and a small declarative document format with semantic forms. It does not define a transport. v0.1 bodyless GET documents remain straightforward for implementations to support.
+MailWeb v0.3 defines GET and POST requests, correlated responses, semantic documents and constrained optional Presentation Intent. It does not define a transport. Presentation is a suggestion that clients may safely ignore or override.
 
 - [Protocol specification](../../docs/protocol.md)
 - [MailWebRequest schema](schema/mailweb-request.schema.json)

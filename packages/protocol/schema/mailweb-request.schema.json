@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["mailweb", "id", "method", "uri", "headers"],
   "properties": {
-    "mailweb": { "const": "0.2" },
+    "mailweb": { "const": "0.3" },
     "id": {
       "type": "string",
       "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",

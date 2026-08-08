@@ -46,6 +46,8 @@ func (transport *SMTPTransport) Mailbox() string {
 	return transport.ClientMailbox
 }
 
+func (transport *SMTPTransport) Correspondent() string { return transport.Publisher }
+
 func (transport *SMTPTransport) Exchange(ctx context.Context, request MailWebRequest) (MailWebResponse, error) {
 	payload, err := json.Marshal(request)
 	if err != nil {

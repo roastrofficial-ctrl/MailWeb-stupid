@@ -24,7 +24,7 @@ final readonly class ProtocolCodec
         }
         try {
             $validated = $this->validator->make($message, [
-                'mailweb' => ['required', 'in:0.1,0.2'],
+                'mailweb' => ['required', 'in:0.1,0.2,0.3'],
                 'id' => ['required', 'string', 'regex:/^[0-9A-HJKMNP-TV-Z]{26}$/'],
                 'method' => ['required', 'in:GET,POST'],
                 'uri' => ['required', 'string', 'starts_with:mailweb://', 'max:2048'],
@@ -59,11 +59,17 @@ final readonly class ProtocolCodec
     /** @return array<string, mixed> */
     public function response(MailWebRequest $request, Page $page): array
     {
+		$document = $page->jsonSerialize();
+		if ($request->version() !== '0.3') {
+			unset($document['presentation']);
+			foreach ($document['body'] as &$node) { unset($node['variant']); }
+			unset($node);
+		}
         return [
             'mailweb' => $request->version(),
             'request_id' => $request->id(),
             'status' => $page->status,
-            'document' => $page->jsonSerialize(),
+			'document' => $document,
         ];
     }
 }

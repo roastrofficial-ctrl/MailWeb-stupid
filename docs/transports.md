@@ -1,6 +1,6 @@
 # Development transports
 
-MailWeb Protocol v0.2 defines request and response JSON only. Transports are replaceable carriers for those messages.
+MailWeb Protocol v0.3 defines request and response JSON only. Transports are replaceable carriers for those messages.
 
 ## Direct HTTP
 

@@ -9,6 +9,8 @@ final class Page implements JsonSerializable
 {
     /** @var array<int, array<string, mixed>> */
     private array $body = [];
+	/** @var array<string, string>|null */
+	private ?array $presentation = null;
 
     public function __construct(public readonly string $title, public readonly int $status = 200)
     {
@@ -17,12 +19,13 @@ final class Page implements JsonSerializable
         }
     }
 
-    public function heading(string $text, int $level = 1): self
+    public function heading(string $text, int $level = 1, string $variant = 'normal'): self
     {
         if ($level < 1 || $level > 6) {
             throw new InvalidArgumentException('Heading level must be between 1 and 6.');
         }
-        return $this->node(['type' => 'heading', 'level' => $level, 'text' => $text]);
+		if (! in_array($variant, ['normal', 'display'], true)) { throw new InvalidArgumentException('Invalid heading variant.'); }
+        return $this->node(array_filter(['type' => 'heading', 'level' => $level, 'text' => $text, 'variant' => $variant === 'normal' ? null : $variant]));
     }
 
     public function paragraph(string $text): self
@@ -35,15 +38,27 @@ final class Page implements JsonSerializable
         return $this->navigation('link', $label, $href);
     }
 
-    public function button(string $label, string $href): self
+    public function button(string $label, string $href, string $variant = 'normal'): self
     {
-        return $this->navigation('button', $label, $href);
+		if (! in_array($variant, ['normal', 'prominent'], true)) { throw new InvalidArgumentException('Invalid button variant.'); }
+		return $this->node(array_filter(['type' => 'button', 'label' => $label, 'href' => $href, 'variant' => $variant === 'normal' ? null : $variant]));
     }
 
-    public function image(string $src, string $alt): self
+    public function image(string $src, string $alt, string $variant = 'normal'): self
     {
-        return $this->node(['type' => 'image', 'src' => $src, 'alt' => $alt]);
+		if (! in_array($variant, ['normal', 'hero'], true)) { throw new InvalidArgumentException('Invalid image variant.'); }
+        return $this->node(array_filter(['type' => 'image', 'src' => $src, 'alt' => $alt, 'variant' => $variant === 'normal' ? null : $variant]));
     }
+
+	public function presentation(string $accent, string $background, string $foreground, string $surface, string $typeface = 'system', string $density = 'comfortable', string $corners = 'soft'): self
+	{
+		foreach ([$accent, $background, $foreground, $surface] as $color) {
+			if (! preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) { throw new InvalidArgumentException('Presentation colors must be six-digit hex values.'); }
+		}
+		if (! in_array($typeface, ['system', 'editorial', 'sans', 'mono'], true) || ! in_array($density, ['compact', 'comfortable', 'spacious'], true) || ! in_array($corners, ['square', 'soft', 'round'], true)) { throw new InvalidArgumentException('Invalid presentation intent.'); }
+		$this->presentation = compact('accent', 'background', 'foreground', 'surface', 'typeface', 'density', 'corners');
+		return $this;
+	}
 
     /** @param array<int, TextField> $fields */
     public function form(string $method, string $action, array $fields, string $submit): self
@@ -54,7 +69,7 @@ final class Page implements JsonSerializable
         }
         foreach ($fields as $field) {
             if (! $field instanceof TextField) {
-                throw new InvalidArgumentException('MailWeb 0.2 forms support TextField values only.');
+                throw new InvalidArgumentException('MailWeb forms support TextField values only.');
             }
         }
         return $this->node([
@@ -72,7 +87,9 @@ final class Page implements JsonSerializable
 
     public function jsonSerialize(): array
     {
-        return ['title' => $this->title, 'body' => $this->body];
+		$result = ['title' => $this->title, 'body' => $this->body];
+		if ($this->presentation !== null) { $result['presentation'] = $this->presentation; }
+		return $result;
     }
 
     private function navigation(string $type, string $label, string $href): self

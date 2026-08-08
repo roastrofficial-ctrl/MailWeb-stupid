@@ -4,11 +4,12 @@ use MailWeb\Laravel\Facades\MailWeb;
 use MailWeb\Laravel\Http\MailWebRequest;
 
 MailWeb::get('/', fn () => MailWeb::page('Dear Internet')
-    ->heading('Dear Internet')
+	->presentation('#315C45', '#FFFDF8', '#17231C', '#F3EFE5', 'editorial', 'spacious', 'soft')
+    ->heading('Dear Internet', variant: 'display')
     ->paragraph('This looks like a website. It is actually private correspondence.')
     ->paragraph('Postbox did not HTTP GET this page from a web server. It wrote to a private email address and waited for this document to arrive in the reply.')
     ->paragraph('Every heading, paragraph, link and button below was sealed inside that private message, then safely rendered by your MailWeb browser.')
-    ->button('Prove it was posted', '/proof')
+    ->button('Prove it was posted', '/proof', 'prominent')
     ->link('Correspond with us', '/hello')
     ->link('Inspect the private exchange', '/proof')
     ->link('Why browse by correspondence?', '/why'));

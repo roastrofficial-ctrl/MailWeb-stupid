@@ -1,9 +1,18 @@
 {
-  "mailweb": "0.2",
+  "mailweb": "0.3",
   "request_id": "01J00000000000000000000000",
   "status": 200,
   "document": {
     "title": "An introduction",
+    "presentation": {
+      "accent": "#315C45",
+      "background": "#FFFDF8",
+      "foreground": "#17231C",
+      "surface": "#F3EFE5",
+      "typeface": "editorial",
+      "density": "spacious",
+      "corners": "soft"
+    },
     "body": [
       {
         "type": "heading",

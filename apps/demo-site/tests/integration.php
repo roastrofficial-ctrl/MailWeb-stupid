@@ -16,12 +16,17 @@ $assert = function (bool $condition, string $message) use (&$assertions): void {
 };
 $publisher = app(Publisher::class);
 $request = fn (string $id, string $method, string $uri, ?array $body = null) => array_filter([
-    'mailweb' => '0.2', 'id' => $id, 'method' => $method, 'uri' => $uri,
+    'mailweb' => '0.3', 'id' => $id, 'method' => $method, 'uri' => $uri,
     'headers' => $method === 'POST' ? ['content-type' => 'application/json'] : [], 'body' => $body,
 ], fn (mixed $value, string $key) => ! ($key === 'body' && $value === null), ARRAY_FILTER_USE_BOTH);
 
 $home = $publisher->handle($request('01J00000000000000000000010', 'GET', 'mailweb://demo.local/'));
 $assert($home['document']['title'] === 'Dear Internet', 'Packaged home route failed.');
+$assert($home['document']['presentation']['typeface'] === 'editorial', 'Presentation Intent was not serialized.');
+$legacyHomeRequest = $request('01J00000000000000000000013', 'GET', 'mailweb://demo.local/');
+$legacyHomeRequest['mailweb'] = '0.2';
+$legacyHome = $publisher->handle($legacyHomeRequest);
+$assert(! isset($legacyHome['document']['presentation']) && ! isset($legacyHome['document']['body'][0]['variant']), 'Presentation was not safely downgraded for MailWeb 0.2.');
 $assert(count(array_filter($home['document']['body'], fn (array $node) => $node['type'] === 'link')) === 3, 'prEmail discovery links changed.');
 
 $form = $publisher->handle($request('01J00000000000000000000011', 'GET', 'mailweb://demo.local/hello'));

@@ -26,14 +26,16 @@ type NavigationResult struct {
 	OpenedAt           time.Time       `json:"opened_at"`
 	NavigationMS       int64           `json:"navigation_ms"`
 	ClientMailbox      string          `json:"client_mailbox,omitempty"`
+	PublisherMailbox   string          `json:"publisher_mailbox,omitempty"`
 }
 
 type PrefetchState struct {
-	Phase     string `json:"phase"`
-	Active    int    `json:"active"`
-	Completed int    `json:"completed"`
-	Cached    int    `json:"cached"`
-	Message   string `json:"message"`
+	Phase     string   `json:"phase"`
+	Active    int      `json:"active"`
+	Completed int      `json:"completed"`
+	Cached    int      `json:"cached"`
+	Message   string   `json:"message"`
+	Targets   []string `json:"targets,omitempty"`
 }
 
 type BrowserState struct {
@@ -44,6 +46,16 @@ type BrowserState struct {
 	ClientMailbox     string            `json:"client_mailbox,omitempty"`
 	Prefetch          PrefetchState     `json:"premail"`
 	Notice            string            `json:"notice,omitempty"`
+	Archive           []ArchiveItem     `json:"archive"`
+}
+
+type ArchiveItem struct {
+	URI         string    `json:"uri"`
+	Title       string    `json:"title"`
+	ReceivedAt  time.Time `json:"received_at"`
+	Delivery    string    `json:"delivery"`
+	Current     bool      `json:"current"`
+	RoundTripMS int64     `json:"round_trip_ms"`
 }
 
 type cacheEntry struct {
@@ -55,18 +67,19 @@ type cacheEntry struct {
 // BrowserSession owns navigation, history and experimental prEmail state.
 // Transport remains the only boundary that knows how messages are carried.
 type BrowserSession struct {
-	mu              sync.Mutex
-	transport       Transport
-	transportName   string
-	clientMailbox   string
-	history         []NavigationResult
-	index           int
-	cache           map[string]cacheEntry
-	inflight        map[string]chan struct{}
-	cacheTTL        time.Duration
-	prefetch        PrefetchState
-	lastNotice      string
-	prefetchEnabled bool
+	mu               sync.Mutex
+	transport        Transport
+	transportName    string
+	clientMailbox    string
+	publisherMailbox string
+	history          []NavigationResult
+	index            int
+	cache            map[string]cacheEntry
+	inflight         map[string]chan struct{}
+	cacheTTL         time.Duration
+	prefetch         PrefetchState
+	lastNotice       string
+	prefetchEnabled  bool
 }
 
 func NewBrowserSession(transport Transport, transportName string) *BrowserSession {
@@ -74,8 +87,12 @@ func NewBrowserSession(transport Transport, transportName string) *BrowserSessio
 	if provider, ok := transport.(interface{ Mailbox() string }); ok {
 		mailbox = provider.Mailbox()
 	}
+	publisher := ""
+	if correspondent, ok := transport.(interface{ Correspondent() string }); ok {
+		publisher = correspondent.Correspondent()
+	}
 	return &BrowserSession{
-		transport: transport, transportName: transportName, clientMailbox: mailbox, index: -1,
+		transport: transport, transportName: transportName, clientMailbox: mailbox, publisherMailbox: publisher, index: -1,
 		cache: map[string]cacheEntry{}, inflight: map[string]chan struct{}{}, cacheTTL: defaultCacheTTL,
 		prefetchEnabled: true,
 		prefetch:        PrefetchState{Phase: "idle", Message: "prEmail: waiting for addresses."},
@@ -218,12 +235,20 @@ func (session *BrowserSession) navigate(ctx context.Context, method, uri string,
 		}
 		result.NavigationMS = time.Since(started).Milliseconds()
 	} else {
-		result.Delivery = "prEmail cache"
+		if result.PrefetchedAt != nil {
+			result.Delivery = "prEmail cache"
+		} else {
+			result.Delivery = "correspondence archive"
+		}
 		result.OpenedAt = time.Now().UTC()
 		result.NavigationMS = time.Since(started).Milliseconds()
 	}
 	session.mu.Lock()
-	if result.Delivery == "prEmail cache" {
+	if method == "GET" && result.Response.Status >= 200 && result.Response.Status < 300 && result.Delivery == "live" {
+		now := time.Now().UTC()
+		session.cache[canonical] = cacheEntry{result: result, fetchedAt: now, expiresAt: now.Add(session.cacheTTL)}
+	}
+	if result.Delivery != "live" {
 		session.lastNotice = "Already in your postbox — opened instantly."
 	} else {
 		session.lastNotice = ""
@@ -260,6 +285,7 @@ func (session *BrowserSession) exchange(ctx context.Context, method, uri string,
 		URI: uri, Request: request, Response: response, Transport: session.transportName, Delivery: "live",
 		RequestSentAt: sent, ResponseReceivedAt: received, RoundTripMS: received.Sub(sent).Milliseconds(),
 		OpenedAt: received, NavigationMS: received.Sub(sent).Milliseconds(), ClientMailbox: session.clientMailbox,
+		PublisherMailbox: session.publisherMailbox,
 	}, nil
 }
 
@@ -338,6 +364,7 @@ func (session *BrowserSession) discover(current NavigationResult) {
 	session.prefetch.Phase = "fetching"
 	session.prefetch.Active += len(targets)
 	session.prefetch.Completed = 0
+	session.prefetch.Targets = append(session.prefetch.Targets, targets...)
 	session.prefetch.Message = prefetchAwaitingMessage(session.prefetch.Active)
 	session.mu.Unlock()
 	for _, target := range targets {
@@ -361,6 +388,12 @@ func (session *BrowserSession) prefetchURI(uri string) {
 		delete(session.inflight, uri)
 	}
 	session.prefetch.Active--
+	for index, target := range session.prefetch.Targets {
+		if target == uri {
+			session.prefetch.Targets = append(session.prefetch.Targets[:index], session.prefetch.Targets[index+1:]...)
+			break
+		}
+	}
 	session.updatePrefetchStatusLocked()
 	session.mu.Unlock()
 }
@@ -375,7 +408,9 @@ func (session *BrowserSession) updatePrefetchStatusLocked() {
 	cached := 0
 	for key, entry := range session.cache {
 		if now.Before(entry.expiresAt) {
-			cached++
+			if entry.result.PrefetchedAt != nil {
+				cached++
+			}
 		} else {
 			delete(session.cache, key)
 		}
@@ -430,7 +465,33 @@ func (session *BrowserSession) stateLocked() BrowserState {
 		current := session.history[session.index]
 		state.Current = &current
 	}
+	seen := map[string]bool{}
+	if state.Current != nil {
+		state.Archive = append(state.Archive, archiveItem(*state.Current, true))
+		seen[state.Current.URI] = true
+	}
+	for uri, entry := range session.cache {
+		if !seen[uri] && time.Now().Before(entry.expiresAt) {
+			state.Archive = append(state.Archive, archiveItem(entry.result, false))
+		}
+	}
+	sort.Slice(state.Archive, func(i, j int) bool { return state.Archive[i].ReceivedAt.After(state.Archive[j].ReceivedAt) })
 	return state
+}
+
+func archiveItem(result NavigationResult, current bool) ArchiveItem {
+	title := result.URI
+	if result.Response.Document != nil && result.Response.Document.Title != "" {
+		title = result.Response.Document.Title
+	}
+	delivery := result.Delivery
+	if delivery == "live" {
+		delivery = "live correspondence"
+	}
+	if result.PrefetchedAt != nil {
+		delivery = "prEmail"
+	}
+	return ArchiveItem{URI: result.URI, Title: title, ReceivedAt: result.ResponseReceivedAt, Delivery: delivery, Current: current, RoundTripMS: result.RoundTripMS}
 }
 
 func prettyJSON(value any) string {

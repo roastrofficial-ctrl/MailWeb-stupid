@@ -1,8 +1,8 @@
-# MailWeb Protocol v0.2
+# MailWeb Protocol v0.3
 
 ## Status
 
-This document defines the experimental MailWeb Protocol v0.2. The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** carry their usual RFC meanings.
+This document defines the experimental MailWeb Protocol v0.3. The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** carry their usual RFC meanings.
 
 ## 1. Scope and transport independence
 
@@ -12,7 +12,7 @@ Messages are UTF-8 JSON objects. The canonical [request](../packages/protocol/sc
 
 ## 2. Requests
 
-Every request contains `mailweb: "0.2"`, a fresh uppercase ULID `id`, `method`, an absolute `mailweb://` URI, and string-valued `headers`.
+Every request contains `mailweb: "0.3"`, a fresh uppercase ULID `id`, `method`, an absolute `mailweb://` URI, and string-valued `headers`.
 
 ### 2.1 GET and query parameters
 
@@ -20,7 +20,7 @@ GET retrieves a document and MUST NOT contain `body`. Query parameters belong in
 
 ```json
 {
-  "mailweb": "0.2",
+  "mailweb": "0.3",
   "id": "01J00000000000000000000000",
   "method": "GET",
   "uri": "mailweb://demo.local/search?q=internet",
@@ -32,11 +32,11 @@ The query is part of resource identity. Publishers parse it from `uri`; no paral
 
 ### 2.2 POST and request bodies
 
-POST submits application data. In v0.2, `body` is a JSON object and is REQUIRED for POST. A JSON body SHOULD be described by `content-type: application/json`:
+POST submits application data. In v0.3, `body` is a JSON object and is REQUIRED for POST. A JSON body SHOULD be described by `content-type: application/json`:
 
 ```json
 {
-  "mailweb": "0.2",
+  "mailweb": "0.3",
   "id": "01J00000000000000000000000",
   "method": "POST",
   "uri": "mailweb://demo.local/hello",
@@ -45,17 +45,17 @@ POST submits application data. In v0.2, `body` is a JSON object and is REQUIRED 
 }
 ```
 
-Headers are MailWeb application metadata, not SMTP or HTTP headers. v0.2 defines no cookies, sessions, or authentication.
+Headers are MailWeb application metadata, not SMTP or HTTP headers. v0.3 defines no cookies, sessions, or authentication.
 
 ## 3. Responses and correlation
 
-A response contains `mailweb: "0.2"`, `request_id`, an integer `status` from 100 through 599, and a `document`. `request_id` MUST exactly match the request `id`. Status describes the MailWeb result, not carrier delivery. A document is required even for errors.
+A response contains `mailweb: "0.3"`, `request_id`, an integer `status` from 100 through 599, and a `document`. `request_id` MUST exactly match the request `id`. Status describes the MailWeb result, not carrier delivery. A document is required even for errors.
 
 ## 4. Documents
 
 A document contains a plain-text `title` and ordered `body`. Text is never markup. Renderers MUST escape it and MUST NOT interpret HTML, Markdown, JavaScript, templates, or event handlers.
 
-v0.2 supports:
+v0.3 supports:
 
 - `heading`: `level` 1–6 and plain `text`.
 - `paragraph`: plain `text`.
@@ -84,19 +84,41 @@ References resolve against the request URI. Clients MUST reject executable schem
 }
 ```
 
-v0.2 permits GET and POST forms and `text` fields only. Field names within a form MUST be unique. The renderer owns native controls; publishers supply no HTML or scripts.
+v0.3 permits GET and POST forms and `text` fields only. Field names within a form MUST be unique. The renderer owns native controls; publishers supply no HTML or scripts.
 
 On GET submission, the client URI-encodes field values into the action URI query and sends a bodyless GET. On POST submission, it sends field names and string values as the request JSON body. Form submissions use the selected transport exactly like other navigation.
+
+### 4.2 Presentation Intent
+
+A document MAY contain a `presentation` object. Presentation Intent is a constrained suggestion, never publisher CSS:
+
+```json
+{
+  "accent": "#315C45",
+  "background": "#FFFDF8",
+  "foreground": "#17231C",
+  "surface": "#F3EFE5",
+  "typeface": "editorial",
+  "density": "spacious",
+  "corners": "soft"
+}
+```
+
+Colors MUST be six-digit hexadecimal values. `typeface` is `system`, `editorial`, `sans`, or `mono`; `density` is `compact`, `comfortable`, or `spacious`; and `corners` is `square`, `soft`, or `round`.
+
+Headings MAY suggest `variant: "display"`, images MAY suggest `variant: "hero"`, and buttons MAY suggest `variant: "prominent"`; `normal` is valid for each. These are semantic hints, not style declarations.
+
+Clients MAY ignore or override any presentation hint. They MUST NOT treat hints as CSS, URLs, markup, executable content, or permission to fetch another resource. The publisher owns the message; the reader owns the screen.
 
 ## 5. Processing and safety
 
 The client constructs a valid request; a transport carries it unchanged; the publisher routes method and URI, creates a correlated response, and a transport returns it unchanged. The client validates version, correlation, status, and every document node before rendering.
 
-“Private” describes the messaging model, not a v0.2 security guarantee. Deployments obtain confidentiality, identity, integrity, and access control from their environment. Every publisher document remains untrusted.
+“Private” describes the messaging model, not a v0.3 security guarantee. Deployments obtain confidentiality, identity, integrity, and access control from their environment. Every publisher document remains untrusted.
 
 ## 6. Compatibility
 
-v0.1 defined bodyless GET only and five non-form nodes. An implementation MAY continue accepting valid v0.1 request/response pairs. It MUST NOT silently interpret a mixed-version pair or unknown fields as v0.2.
+v0.1 defined bodyless GET only and five non-form nodes. v0.2 added POST, JSON bodies, query semantics, and forms. v0.3 adds only optional Presentation Intent and node variants. A v0.3 document without those optional fields has the same semantic representation as v0.2. Implementations MAY continue accepting valid older request/response pairs but MUST reject mixed-version pairs and unknown fields for the declared version.
 
 ## 7. Experimental client behavior: prEmail
 

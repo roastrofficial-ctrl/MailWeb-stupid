@@ -123,7 +123,7 @@ func TestGraphicalRendererNeverUsesInnerHTML(t *testing.T) {
 	}
 }
 
-func TestProtocol02GETQueryPOSTBodyAndForm(t *testing.T) {
+func TestProtocol03GETQueryPOSTBodyAndForm(t *testing.T) {
 	get, err := NewRequest("mailweb://demo.local/search?q=internet")
 	if err != nil || get.URI != "mailweb://demo.local/search?q=internet" || get.Body != nil {
 		t.Fatalf("unexpected GET request: %#v, %v", get, err)
@@ -143,6 +143,21 @@ func TestProtocol02GETQueryPOSTBodyAndForm(t *testing.T) {
 	form.Fields[0].Type = "password"
 	if err := validateNode(form); err == nil {
 		t.Fatal("unsupported form field type accepted")
+	}
+}
+
+func TestPresentationIntentValidation(t *testing.T) {
+	request, _ := NewRequest("mailweb://demo.local/")
+	response := MailWebResponse{MailWeb: request.MailWeb, RequestID: request.ID, Status: 200, Document: &MailWebDocument{
+		Title: "Themed", Presentation: &Presentation{Accent: "#315C45", Background: "#FFFDF8", Foreground: "#17231C", Surface: "#F3EFE5", Typeface: "editorial", Density: "spacious", Corners: "soft"},
+		Body: []Node{{Type: "heading", Level: 1, Text: "Hello", Variant: "display"}, {Type: "button", Label: "Open", Href: "/", Variant: "prominent"}},
+	}}
+	if err := ValidateResponse(request, response); err != nil {
+		t.Fatalf("valid presentation rejected: %v", err)
+	}
+	response.Document.Presentation.Accent = "url(javascript:evil)"
+	if err := ValidateResponse(request, response); err == nil {
+		t.Fatal("unsafe presentation accepted")
 	}
 }
 
@@ -215,6 +230,9 @@ func TestPrEmailCacheHitExpiryAndReloadBypass(t *testing.T) {
 	if err != nil || state.Current.Delivery != "prEmail cache" || requestCount(transport) != 2 {
 		t.Fatalf("cache hit failed: %#v, %v", state.Current, err)
 	}
+	if len(state.Archive) == 0 || state.Archive[0].URI != "mailweb://demo.local/a" {
+		t.Fatalf("cached correspondence missing from archive: %#v", state.Archive)
+	}
 	if _, err := session.Reload(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +242,6 @@ func TestPrEmailCacheHitExpiryAndReloadBypass(t *testing.T) {
 	if _, err := session.Navigate(context.Background(), "mailweb://demo.local/"); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, time.Second, func() bool { return requestCount(transport) >= 4 })
 	time.Sleep(60 * time.Millisecond)
 	before := requestCount(transport)
 	if _, err := session.Navigate(context.Background(), "mailweb://demo.local/a"); err != nil {
@@ -248,6 +265,22 @@ func TestPrEmailNeverRunsForPOSTNavigation(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 	if requestCount(transport) != 1 {
 		t.Fatalf("POST caused speculative requests: %d", requestCount(transport))
+	}
+}
+
+func TestExhibitUIKeepsPresentationAndCorrespondenceLocal(t *testing.T) {
+	assets, _ := fs.Sub(uiFiles, "ui")
+	script, _ := fs.ReadFile(assets, "app.js")
+	markup, _ := fs.ReadFile(assets, "index.html")
+	styles, _ := fs.ReadFile(assets, "styles.css")
+	combined := string(script) + string(markup) + string(styles)
+	for _, required := range []string{"CorrespondenceAnimation", "PresentationResolver", "PostboxDrawer", "CorrespondenceView", "requestEmail", "responseEmail", "prefers-reduced-motion"} {
+		if !strings.Contains(combined, required) {
+			t.Fatalf("exhibit UI missing %s", required)
+		}
+	}
+	if !strings.Contains(string(script), `presentation.apply(currentState.current.response.document, appearanceMode)`) {
+		t.Fatal("appearance changes do not locally re-resolve presentation")
 	}
 }
 

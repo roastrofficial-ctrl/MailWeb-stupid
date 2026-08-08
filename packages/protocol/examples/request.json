@@ -1,5 +1,5 @@
 {
-  "mailweb": "0.2",
+  "mailweb": "0.3",
   "id": "01J00000000000000000000000",
   "method": "POST",
   "uri": "mailweb://demo.local/hello",

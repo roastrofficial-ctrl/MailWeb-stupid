@@ -11,6 +11,19 @@
         <header class="chrome">
             <div class="topline">
                 <div class="brand"><span class="brand-mark">M</span><span>Postbox</span></div>
+				<div class="reader-tools">
+					<details class="appearance-menu">
+						<summary>Appearance</summary>
+						<fieldset id="appearance-options">
+							<legend>Reader appearance</legend>
+							<label><input type="radio" name="appearance" value="correspondent" checked> Correspondent’s preference</label>
+							<label><input type="radio" name="appearance" value="mine"> My preference</label>
+							<label><input type="radio" name="appearance" value="reader"> Reader mode</label>
+							<p>Changes only your screen. No correspondence is sent.</p>
+						</fieldset>
+					</details>
+					<button id="postbox-open" class="postbox-button" type="button" aria-haspopup="dialog"><span class="postbox-icon" aria-hidden="true"></span> Your Postbox <strong id="postbox-count">0</strong></button>
+				</div>
                 <div class="mailbox-badge">
                     <span>YOUR PRIVATE MAILBOX</span>
                     <strong id="client-mailbox">Assigning mailbox…</strong>
@@ -34,6 +47,7 @@
 				<div id="premail-status" class="premail-status" aria-live="polite">prEmail: checking the address book…</div>
 				<button class="explain-button" type="button" popovertarget="premail-explainer" title="What is prEmail?" aria-label="What is prEmail?">?</button>
 			</div>
+			<div id="premail-letters" class="premail-letters" aria-hidden="true"></div>
         </header>
 
 		<div id="mailbox-explainer" class="explainer" popover>
@@ -57,6 +71,12 @@
 		</div>
 
         <div id="error" class="error" role="alert" hidden></div>
+		<section id="correspondence-stage" class="correspondence-stage" hidden aria-live="polite">
+			<div class="route-party"><strong>YOU / POSTBOX</strong><small id="route-mailbox">private mailbox</small></div>
+			<div class="postal-route"><span class="route-line"></span><span id="travelling-envelope" class="envelope" aria-hidden="true"><i></i></span></div>
+			<div class="route-party route-destination"><strong id="route-host">correspondent</strong><small>MailWeb application</small></div>
+			<p id="correspondence-status">Preparing correspondence…</p>
+		</section>
 
         <section class="workspace">
             <article id="viewport" class="viewport" aria-live="polite">
@@ -89,10 +109,24 @@
                     <pre id="debug-request">No request sent yet.</pre>
                     <h2>MailWebResponse</h2>
                     <pre id="debug-response">No response received yet.</pre>
+					<button id="correspondence-view-open" class="correspondence-view-button" type="button" disabled>View as correspondence</button>
                 </details>
             </aside>
         </section>
     </main>
+
+	<dialog id="postbox-drawer" class="postbox-drawer">
+		<header><div><p class="eyebrow">SESSION CORRESPONDENCE</p><h2>Your Postbox</h2></div><button class="dialog-close" type="button" data-close="postbox-drawer" aria-label="Close">×</button></header>
+		<p>Private replies already received and filed for this browsing session.</p>
+		<div id="postbox-items" class="postbox-items"></div>
+	</dialog>
+
+	<dialog id="correspondence-view" class="correspondence-view">
+		<header><div><p class="eyebrow">INTERPRETED FROM THE REAL EXCHANGE</p><h2>Correspondence View</h2></div><button class="dialog-close" type="button" data-close="correspondence-view" aria-label="Close">×</button></header>
+		<p class="truth-note">This friendly prose is derived from the actual MailWeb request and response. It is not a byte-for-byte rendering of the MIME messages.</p>
+		<div id="email-request"></div>
+		<div id="email-response"></div>
+	</dialog>
     <script src="/app.js" defer></script>
 </body>
 </html>

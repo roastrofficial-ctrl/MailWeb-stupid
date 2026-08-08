@@ -82,7 +82,7 @@ produces a request conceptually like:
 
 ```json
 {
-  "mailweb": "0.2",
+  "mailweb": "0.3",
   "method": "GET",
   "uri": "mailweb://demo.local/hello"
 }
@@ -98,7 +98,7 @@ No HTTP response was used to deliver the page.
 
 MailWeb isn't limited to static documents.
 
-Protocol 0.2 supports GET requests, query parameters, POST requests, request bodies and semantic forms.
+Protocol 0.3 supports GET requests, query parameters, POST requests, request bodies and semantic forms.
 
 A MailWeb page can present an input field, the user can submit it, Laravel can process the submitted data, and the resulting dynamic document travels back through the same correspondence mechanism.
 
@@ -262,7 +262,7 @@ It's simply a Laravel application that happens to speak MailWeb.
 - `apps/postbox` — Go graphical and terminal clients, transports, protocol validator and renderers
 - `apps/demo-site` — ordinary Laravel application consuming the reusable package
 - `packages/protocol` — protocol specification, JSON Schema and examples
-- `packages/laravel-mailweb` — reusable Composer package implementing MailWeb 0.2 for Laravel
+- `packages/laravel-mailweb` — reusable Composer package implementing MailWeb 0.3 for Laravel
 - `extension` — reserved for future browser integration
 
 ## Browse locally
@@ -313,6 +313,12 @@ The graphical client includes:
 - request/response timing
 - transport visibility
 - prEmail status and cache visibility
+- live send/wait/receive correspondence animations
+- a session-only correspondence archive
+- visibly distinct retrieval of already-received letters
+- constrained publisher Presentation Intent with reader overrides
+- Correspondence View translating the real exchange into familiar letters
+- full reduced-motion support
 
 Set:
 
@@ -435,7 +441,7 @@ MailWeb deliberately does **not** currently provide:
 
 There is intentionally no database, queue, event bus, persistent cache or orchestration beyond Compose.
 
-prEmail's deliberately primitive cache exists only within one Postbox process and expires entries after 60 seconds.
+Postbox's deliberately primitive correspondence archive exists only within one process and expires GET replies after 60 seconds. prEmail files its speculative replies into that same archive.
 
 ## Status
 
