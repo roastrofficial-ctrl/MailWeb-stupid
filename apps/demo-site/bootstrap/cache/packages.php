@@ -1,14 +1,25 @@
 <?php return array (
-  'nesbot/carbon' => 
+  'mailweb/laravel-mailweb' =>
   array (
-    'providers' => 
+    'providers' =>
+    array (
+      0 => 'MailWeb\\Laravel\\MailWebServiceProvider',
+    ),
+    'aliases' =>
+    array (
+      'MailWeb' => 'MailWeb\\Laravel\\Facades\\MailWeb',
+    ),
+  ),
+  'nesbot/carbon' =>
+  array (
+    'providers' =>
     array (
       0 => 'Carbon\\Laravel\\ServiceProvider',
     ),
   ),
-  'nunomaduro/termwind' => 
+  'nunomaduro/termwind' =>
   array (
-    'providers' => 
+    'providers' =>
     array (
       0 => 'Termwind\\Laravel\\TermwindServiceProvider',
     ),

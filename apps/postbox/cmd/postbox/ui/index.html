@@ -14,6 +14,7 @@
                 <div class="mailbox-badge">
                     <span>YOUR PRIVATE MAILBOX</span>
                     <strong id="client-mailbox">Assigning mailbox…</strong>
+					<button class="explain-button" type="button" popovertarget="mailbox-explainer" title="About your private mailbox" aria-label="About your private mailbox">?</button>
                 </div>
             </div>
             <nav class="controls" aria-label="Browser controls">
@@ -26,10 +27,34 @@
                     <input id="address" value="mailweb://demo.local/" autocomplete="off" spellcheck="false">
                     <button type="submit" class="go-button">Send</button>
                 </form>
+				<button class="explain-button chrome-explainer" type="button" popovertarget="address-explainer" title="How MailWeb addresses work" aria-label="How MailWeb addresses work">?</button>
             </nav>
-            <div id="loading" class="loading" hidden><span></span> Waiting for <s>URL</s> new correspondence…</div>
-			<div id="premail-status" class="premail-status" aria-live="polite">prEmail: checking the address book…</div>
+            <div id="loading" class="loading" hidden><span></span> Private request sent — waiting for <s>URL</s> new correspondence…</div>
+			<div class="premail-row">
+				<div id="premail-status" class="premail-status" aria-live="polite">prEmail: checking the address book…</div>
+				<button class="explain-button" type="button" popovertarget="premail-explainer" title="What is prEmail?" aria-label="What is prEmail?">?</button>
+			</div>
         </header>
+
+		<div id="mailbox-explainer" class="explainer" popover>
+			<button class="popover-close" type="button" popovertarget="mailbox-explainer" popovertargetaction="hide" aria-label="Close">×</button>
+			<p class="eyebrow">YOUR PRIVATE REPLY ADDRESS</p>
+			<h2>The publisher writes back here.</h2>
+			<p>Postbox sends each request from this mailbox. The MailWeb-enabled application replies to the same address with your requested document enclosed. This is the actual SMTP address used by this browsing session—not decorative browser chrome.</p>
+		</div>
+		<div id="address-explainer" class="explainer" popover>
+			<button class="popover-close" type="button" popovertarget="address-explainer" popovertargetaction="hide" aria-label="Close">×</button>
+			<p class="eyebrow">AN ADDRESS, NOT AN HTTP URL</p>
+			<h2>Postbox will write to an application.</h2>
+			<p>Entering a <code>mailweb://</code> address does not make an HTTP request to a web server. Postbox wraps the address in a MailWeb request, privately emails it to an application that speaks MailWeb, waits for the application’s reply, and renders the semantic document enclosed in that private message.</p>
+		</div>
+		<div id="premail-explainer" class="explainer" popover>
+			<button class="popover-close" type="button" popovertarget="premail-explainer" popovertargetaction="hide" aria-label="Close">×</button>
+			<p class="eyebrow">SPECULATIVE PRIVATE CORRESPONDENCE</p>
+			<h2>prEmail writes ahead.</h2>
+			<p>When a response email contains eligible same-origin GET links, Postbox may privately write to as many as three of those MailWeb destinations before you click them. Their emailed replies are filed in memory for 60 seconds, making later browsing feel instant.</p>
+			<p>It never pre-mails forms, POST requests, buttons, external addresses, or links found inside a prefetched reply. The activity remains visible because speculative correspondence can reveal interest in pages you never actually visit.</p>
+		</div>
 
         <div id="error" class="error" role="alert" hidden></div>
 
@@ -37,14 +62,15 @@
             <article id="viewport" class="viewport" aria-live="polite">
                 <div class="empty-state">
                     <p class="eyebrow">PRIVATE CORRESPONDENCE BROWSER</p>
-                    <h1>Where would you like to write?</h1>
-                    <p>Enter a <code>mailweb://</code> address above. Postbox will mail the publisher and wait for a reply.</p>
+                    <h1>Who would you like to write to?</h1>
+                    <p>Enter a <code>mailweb://</code> address above. Postbox will privately email the application, wait for its response email, then render the enclosed document as though you had browsed there.</p>
                 </div>
             </article>
 
             <aside class="debug-panel">
                 <details open>
                     <summary>Message inspector</summary>
+					<p class="inspector-explainer">The evidence locker: the exact private request sent by Postbox and the correlated reply received from the publisher.</p>
                     <dl class="metadata">
                         <div><dt>URI</dt><dd id="debug-uri">—</dd></div>
                         <div><dt>Request ID</dt><dd id="debug-request-id">—</dd></div>

@@ -58,15 +58,21 @@ function updateState(state) {
 	setText("premail-status", state.notice || state.premail?.message || "prEmail: idle.");
     if (!state.current) return;
     elements.address.value = state.current.uri;
-    renderDocument(state.current.response.document, state.current.uri);
+    renderDocument(state.current.response.document, state.current.uri, state.current.delivery);
     renderDebug(state.current);
 }
 
-function renderDocument(mailwebDocument, currentURI) {
+function renderDocument(mailwebDocument, currentURI, delivery) {
     elements.viewport.replaceChildren();
     document.title = `${mailwebDocument.title} — Postbox`;
     const page = document.createElement("div");
     page.className = "mailweb-document";
+	const arrival = document.createElement("p");
+	arrival.className = "arrival-note";
+	arrival.textContent = delivery === "prEmail cache"
+		? "PRIVATE EMAIL ALREADY RECEIVED — UNSEALED FROM THE prEMAIL FILE"
+		: "PRIVATE EMAIL RECEIVED — UNSEALED AND RENDERED BY POSTBOX";
+	page.appendChild(arrival);
     for (const node of mailwebDocument.body) {
         page.appendChild(renderNode(node, currentURI));
     }

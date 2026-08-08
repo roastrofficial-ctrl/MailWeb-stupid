@@ -5,9 +5,10 @@ RUN apk add --no-cache libxml2-dev oniguruma-dev \
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
 WORKDIR /app
-COPY composer.json composer.lock ./
+COPY packages/laravel-mailweb /packages/laravel-mailweb
+COPY apps/demo-site/composer.json apps/demo-site/composer.lock ./
 RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --no-scripts
-COPY . .
+COPY apps/demo-site .
 RUN mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && composer dump-autoload --no-dev --no-interaction --optimize \
     && chown -R www-data:www-data storage bootstrap/cache

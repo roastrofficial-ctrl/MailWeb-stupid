@@ -1,6 +1,6 @@
 # Development transports
 
-MailWeb Protocol v0.1 defines request and response JSON only. Transports are replaceable carriers for those messages.
+MailWeb Protocol v0.2 defines request and response JSON only. Transports are replaceable carriers for those messages.
 
 ## Direct HTTP
 
@@ -12,7 +12,7 @@ The `HTTPTransport` sends the request JSON directly to the Laravel development e
 
 ## SMTP through Mailpit
 
-The `SMTPTransport` creates a unique client mailbox for each request, sends an email to `browse@demo.local`, and polls that mailbox through Mailpit's local API. The Laravel `mailweb:consume` worker reads publisher mail, routes the MailWeb URI, and sends a response email back through SMTP.
+The `SMTPTransport` creates a unique mailbox for the Postbox session, sends email to the configured publisher, and polls that mailbox through Mailpit's local API. The reusable Laravel package's `mailweb:listen` command reads publisher mail, routes the MailWeb request, and sends a response email back through SMTP.
 
 Both email bodies have media type `application/mailweb+json`. Email subjects, sender and recipient addresses, transfer encoding, SMTP delivery, mailbox polling, and timeout behavior belong to this transport and are not fields in the MailWeb protocol.
 

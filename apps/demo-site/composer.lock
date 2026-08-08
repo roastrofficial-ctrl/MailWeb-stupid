@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f788cf6e4eb9e8ce3e2aef2615c5b54b",
+    "content-hash": "f009eb8911e961e6606ab5df1453f28e",
     "packages": [
         {
             "name": "brick/math",
@@ -1958,6 +1958,48 @@
                 }
             ],
             "time": "2026-03-08T20:05:35+00:00"
+        },
+        {
+            "name": "mailweb/laravel-mailweb",
+            "version": "dev-main",
+            "dist": {
+                "type": "path",
+                "url": "../../packages/laravel-mailweb",
+                "reference": "1d265b1cde4a6a379d3f63ba45fadcf85ecaed1f"
+            },
+            "require": {
+                "illuminate/console": "^11.0|^12.0",
+                "illuminate/http": "^11.0|^12.0",
+                "illuminate/routing": "^11.0|^12.0",
+                "illuminate/support": "^11.0|^12.0",
+                "illuminate/validation": "^11.0|^12.0",
+                "php": "^8.2",
+                "symfony/mailer": "^7.0"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "MailWeb\\Laravel\\MailWebServiceProvider"
+                    ],
+                    "aliases": {
+                        "MailWeb": "MailWeb\\Laravel\\Facades\\MailWeb"
+                    }
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "MailWeb\\Laravel\\": "src/"
+                }
+            },
+            "license": [
+                "MIT"
+            ],
+            "description": "Publish transport-independent MailWeb documents from Laravel.",
+            "transport-options": {
+                "symlink": true,
+                "relative": true
+            }
         },
         {
             "name": "monolog/monolog",
@@ -5823,7 +5865,9 @@
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "mailweb/laravel-mailweb": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

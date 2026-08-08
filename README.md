@@ -14,9 +14,9 @@ MailWeb messages are independent of their carrier. This repository now provides 
 ## Repository layout
 
 - `apps/postbox` — Go graphical and terminal clients, transports, protocol validator, and renderers
-- `apps/demo-site` — Laravel document publisher
+- `apps/demo-site` — ordinary Laravel application consuming the public package API
 - `packages/protocol` — protocol notes, JSON Schema, and examples
-- `packages/laravel-mailweb` — placeholder for a future Laravel integration package
+- `packages/laravel-mailweb` — reusable Composer package implementing MailWeb 0.2 for Laravel
 - `extension` — placeholder for a future browser extension; it is intentionally not implemented
 
 ## Browse locally

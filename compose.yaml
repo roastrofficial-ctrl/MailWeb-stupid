@@ -25,7 +25,8 @@ services:
 
   demo-site:
     build:
-      context: ./apps/demo-site
+      context: .
+      dockerfile: apps/demo-site/Dockerfile
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
@@ -35,6 +36,7 @@ services:
       - "127.0.0.1:8081:8000"
     volumes:
       - ./apps/demo-site:/app
+      - ./packages/laravel-mailweb:/packages/laravel-mailweb
       - demo-site-vendor:/app/vendor
     healthcheck:
       test: ["CMD", "php", "artisan", "mailweb:health"]
@@ -44,8 +46,9 @@ services:
 
   publisher-worker:
     build:
-      context: ./apps/demo-site
-    command: ["php", "artisan", "mailweb:consume"]
+      context: .
+      dockerfile: apps/demo-site/Dockerfile
+    command: ["php", "artisan", "mailweb:listen"]
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
@@ -57,6 +60,7 @@ services:
       MAILWEB_PUBLISHER_MAILBOX: browse@demo.local
     volumes:
       - ./apps/demo-site:/app
+      - ./packages/laravel-mailweb:/packages/laravel-mailweb
       - demo-site-vendor:/app/vendor
     depends_on:
       mailpit:
