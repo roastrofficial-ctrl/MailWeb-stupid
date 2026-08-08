@@ -37,6 +37,7 @@ func RunWebUI(listenAddress string, session *BrowserSession) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/state", server.state)
 	mux.HandleFunc("POST /api/navigate", server.navigate)
+	mux.HandleFunc("POST /api/form", server.submitForm)
 	mux.HandleFunc("POST /api/back", server.back)
 	mux.HandleFunc("POST /api/forward", server.forward)
 	mux.HandleFunc("POST /api/reload", server.reload)
@@ -45,6 +46,22 @@ func RunWebUI(listenAddress string, session *BrowserSession) error {
 	handler := securityHeaders(mux)
 	log.Printf("Postbox UI listening on http://%s", listenAddress)
 	return http.ListenAndServe(listenAddress, handler)
+}
+
+func (server *uiServer) submitForm(writer http.ResponseWriter, request *http.Request) {
+	var input struct {
+		Method string            `json:"method"`
+		Action string            `json:"action"`
+		Values map[string]string `json:"values"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		writeState(writer, server.session.Snapshot(), fmt.Errorf("invalid form submission: %w", err))
+		return
+	}
+	state, err := server.session.SubmitForm(request.Context(), input.Method, input.Action, input.Values)
+	writeState(writer, state, err)
 }
 
 func (server *uiServer) state(writer http.ResponseWriter, _ *http.Request) {

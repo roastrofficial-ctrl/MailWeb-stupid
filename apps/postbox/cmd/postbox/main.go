@@ -61,6 +61,7 @@ func main() {
 
 func Browse(ctx context.Context, transport Transport, initialURI string, input io.Reader, output io.Writer) error {
 	session := NewBrowserSession(transport, "terminal")
+	session.DisablePrefetch()
 	scanner := bufio.NewScanner(input)
 	state, err := session.Navigate(ctx, initialURI)
 	for {

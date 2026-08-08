@@ -1,0 +1,7 @@
+{
+  "mailweb": "0.2",
+  "id": "01J00000000000000000000001",
+  "method": "GET",
+  "uri": "mailweb://demo.local/search?q=internet",
+  "headers": {}
+}

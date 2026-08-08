@@ -28,6 +28,7 @@
                 </form>
             </nav>
             <div id="loading" class="loading" hidden><span></span> Waiting for <s>URL</s> new correspondence…</div>
+			<div id="premail-status" class="premail-status" aria-live="polite">prEmail: checking the address book…</div>
         </header>
 
         <div id="error" class="error" role="alert" hidden></div>
@@ -49,9 +50,14 @@
                         <div><dt>Request ID</dt><dd id="debug-request-id">—</dd></div>
                         <div><dt>Status</dt><dd id="debug-status">—</dd></div>
                         <div><dt>Transport</dt><dd id="debug-transport">—</dd></div>
+						<div><dt>Method</dt><dd id="debug-method">—</dd></div>
+						<div><dt>Delivery</dt><dd id="debug-delivery">—</dd></div>
                         <div><dt>Sent</dt><dd id="debug-sent">—</dd></div>
                         <div><dt>Received</dt><dd id="debug-received">—</dd></div>
                         <div><dt>Round trip</dt><dd id="debug-duration">—</dd></div>
+						<div><dt>Navigation</dt><dd id="debug-navigation">—</dd></div>
+						<div><dt>Prefetched</dt><dd id="debug-prefetched">—</dd></div>
+						<div><dt>Opened</dt><dd id="debug-opened">—</dd></div>
                     </dl>
                     <h2>MailWebRequest</h2>
                     <pre id="debug-request">No request sent yet.</pre>

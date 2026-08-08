@@ -6,13 +6,13 @@
   "additionalProperties": false,
   "required": ["mailweb", "id", "method", "uri", "headers"],
   "properties": {
-    "mailweb": { "const": "0.1" },
+    "mailweb": { "const": "0.2" },
     "id": {
       "type": "string",
       "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
       "description": "A canonical, uppercase ULID used to correlate the response."
     },
-    "method": { "const": "GET" },
+    "method": { "enum": ["GET", "POST"] },
     "uri": {
       "type": "string",
       "format": "uri",
@@ -24,6 +24,20 @@
       "description": "Protocol metadata. Header names are case-insensitive.",
       "propertyNames": { "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$" },
       "additionalProperties": { "type": "string" }
+    },
+    "body": {
+      "type": "object",
+      "description": "JSON-compatible application data. Present on POST and absent on GET."
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "method": { "const": "GET" } } },
+      "then": { "not": { "required": ["body"] } }
+    },
+    {
+      "if": { "properties": { "method": { "const": "POST" } } },
+      "then": { "required": ["body"] }
+    }
+  ]
 }

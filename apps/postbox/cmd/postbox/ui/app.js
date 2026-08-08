@@ -27,6 +27,10 @@ async function action(endpoint) {
     await requestState(endpoint, {});
 }
 
+async function submitForm(node, values) {
+    await requestState("/api/form", {method: node.method, action: node.action, values});
+}
+
 async function requestState(endpoint, payload) {
     setLoading(true);
     showError("");
@@ -51,6 +55,7 @@ function updateState(state) {
     elements.back.disabled = !state.can_go_back;
     elements.forward.disabled = !state.can_go_forward;
     elements.reload.disabled = !state.current;
+	setText("premail-status", state.notice || state.premail?.message || "prEmail: idle.");
     if (!state.current) return;
     elements.address.value = state.current.uri;
     renderDocument(state.current.response.document, state.current.uri);
@@ -113,6 +118,36 @@ function renderNode(node, currentURI) {
         }
         return figure;
     }
+	case "form": {
+		const form = document.createElement("form");
+		form.className = "mailweb-form";
+		for (const field of node.fields) {
+			const group = document.createElement("label");
+			group.className = "form-field";
+			const label = document.createElement("span");
+			label.textContent = field.label;
+			const input = document.createElement("input");
+			input.type = "text";
+			input.name = field.name;
+			input.placeholder = field.placeholder || "";
+			input.required = Boolean(field.required);
+			input.autocomplete = "off";
+			group.append(label, input);
+			form.appendChild(group);
+		}
+		const submit = document.createElement("button");
+		submit.type = "submit";
+		submit.className = "document-button";
+		submit.textContent = node.submit;
+		form.appendChild(submit);
+		form.addEventListener("submit", (event) => {
+			event.preventDefault();
+			const values = Object.create(null);
+			for (const field of node.fields) values[field.name] = String(new FormData(form).get(field.name) || "");
+			void submitForm(node, values);
+		});
+		return form;
+	}
     default: {
         const unsupported = document.createElement("p");
         unsupported.textContent = "Unsupported document node.";
@@ -139,9 +174,14 @@ function renderDebug(current) {
     setText("debug-request-id", current.request.id);
     setText("debug-status", String(current.response.status));
     setText("debug-transport", current.transport);
+	setText("debug-method", current.request.method);
+	setText("debug-delivery", current.delivery);
     setText("debug-sent", formatTime(current.request_sent_at));
     setText("debug-received", formatTime(current.response_received_at));
     setText("debug-duration", `${current.round_trip_ms} ms`);
+	setText("debug-navigation", `${current.navigation_ms} ms`);
+	setText("debug-prefetched", current.prefetched_at ? formatTime(current.prefetched_at) : "—");
+	setText("debug-opened", formatTime(current.opened_at));
     setText("debug-request", JSON.stringify(current.request, null, 2));
     setText("debug-response", JSON.stringify(current.response, null, 2));
 }
@@ -169,3 +209,12 @@ fetch("/api/state", {headers: {"Accept": "application/json"}})
     .then((response) => response.json())
     .then((result) => updateState(result.state))
     .catch((error) => showError(String(error)));
+
+setInterval(() => {
+	fetch("/api/state", {headers: {"Accept": "application/json"}})
+		.then((response) => response.json())
+		.then((result) => {
+			setText("premail-status", result.state.notice || result.state.premail?.message || "prEmail: idle.");
+		})
+		.catch(() => {});
+}, 500);

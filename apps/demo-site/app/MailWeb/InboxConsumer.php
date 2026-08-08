@@ -4,7 +4,6 @@ namespace App\MailWeb;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Validator;
 use JsonException;
 use RuntimeException;
 use Symfony\Component\Mailer\Mailer;
@@ -54,16 +53,16 @@ final class InboxConsumer
                 }
                 $raw = Http::timeout(3)->get("{$api}/api/v1/message/{$id}/raw")->throw()->body();
                 $request = $this->parseRequest($raw);
-                $response = $this->publisher->respond($request);
+				$response = $this->publisher->respond($request);
                 $this->sendResponse($sender, $response);
-                $command->line("Replied to {$sender} for {$request['uri']}");
+				$command->line("Replied to {$sender} for {$request->method} {$request->uri}");
             } catch (Throwable $error) {
                 $command->error("Skipped Mailpit message {$id}: {$error->getMessage()}");
             }
         }
     }
 
-    private function parseRequest(string $raw): array
+	private function parseRequest(string $raw): MailWebRequest
     {
         $parts = preg_split("/\r?\n\r?\n/", $raw, 2);
         if (count($parts) !== 2) {
@@ -87,18 +86,7 @@ final class InboxConsumer
         } catch (JsonException $error) {
             throw new RuntimeException('Invalid MailWebRequest JSON', previous: $error);
         }
-        $validated = Validator::make($request, [
-            'mailweb' => ['required', 'in:0.1'],
-            'id' => ['required', 'string', 'regex:/^[0-9A-HJKMNP-TV-Z]{26}$/'],
-            'method' => ['required', 'in:GET'],
-            'uri' => ['required', 'string', 'starts_with:mailweb://', 'max:2048'],
-            'headers' => ['present', 'array'],
-            'headers.*' => ['string'],
-        ])->validate();
-        if (array_diff(array_keys($request), ['mailweb', 'id', 'method', 'uri', 'headers']) !== []) {
-            throw new RuntimeException('MailWebRequest contains unknown fields');
-        }
-        return $validated;
+		return MailWebRequest::fromArray($request);
     }
 
     private function sendResponse(string $recipient, array $response): void

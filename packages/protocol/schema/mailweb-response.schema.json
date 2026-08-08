@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["mailweb", "request_id", "status", "document"],
   "properties": {
-    "mailweb": { "const": "0.1" },
+    "mailweb": { "const": "0.2" },
     "request_id": {
       "type": "string",
       "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",

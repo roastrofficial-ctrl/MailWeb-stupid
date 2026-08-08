@@ -1,7 +1,8 @@
 {
-  "mailweb": "0.1",
+  "mailweb": "0.2",
   "id": "01J00000000000000000000000",
-  "method": "GET",
-  "uri": "mailweb://demo.local/",
-  "headers": {}
+  "method": "POST",
+  "uri": "mailweb://demo.local/hello",
+  "headers": {"content-type": "application/json"},
+  "body": {"name": "Levi"}
 }

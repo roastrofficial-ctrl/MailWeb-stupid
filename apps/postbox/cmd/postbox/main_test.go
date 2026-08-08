@@ -5,22 +5,31 @@ import (
 	"context"
 	"io/fs"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 type fakeTransport struct {
-	requests []MailWebRequest
+	mu        sync.Mutex
+	requests  []MailWebRequest
+	documents map[string][]Node
 }
 
 func (transport *fakeTransport) Exchange(_ context.Context, request MailWebRequest) (MailWebResponse, error) {
+	transport.mu.Lock()
 	transport.requests = append(transport.requests, request)
+	transport.mu.Unlock()
 	path := strings.TrimPrefix(request.URI, "mailweb://demo.local")
+	if transport.documents != nil {
+		return MailWebResponse{MailWeb: request.MailWeb, RequestID: request.ID, Status: 200, Document: &MailWebDocument{Title: path, Body: transport.documents[path]}}, nil
+	}
 	if path == "/" {
-		return MailWebResponse{MailWeb: "0.1", RequestID: request.ID, Status: 200, Document: &MailWebDocument{
+		return MailWebResponse{MailWeb: request.MailWeb, RequestID: request.ID, Status: 200, Document: &MailWebDocument{
 			Title: "Home", Body: []Node{{Type: "heading", Level: 1, Text: "Hello"}, {Type: "link", Label: "About", Href: "/about"}},
 		}}, nil
 	}
-	return MailWebResponse{MailWeb: "0.1", RequestID: request.ID, Status: 200, Document: &MailWebDocument{
+	return MailWebResponse{MailWeb: request.MailWeb, RequestID: request.ID, Status: 200, Document: &MailWebDocument{
 		Title: "About", Body: []Node{{Type: "heading", Level: 1, Text: "About MailWeb"}},
 	}}, nil
 }
@@ -71,6 +80,7 @@ func TestParseMailWebResponseRequiresMediaTypeAndDecodesJSON(t *testing.T) {
 func TestBrowserSessionMaintainsBackForwardAndReloadHistory(t *testing.T) {
 	transport := &fakeTransport{}
 	session := NewBrowserSession(transport, "test")
+	session.DisablePrefetch()
 	state, err := session.Navigate(context.Background(), "mailweb://demo.local/")
 	if err != nil || state.CanGoBack || state.CanGoForward {
 		t.Fatalf("unexpected initial state: %#v, %v", state, err)
@@ -111,4 +121,149 @@ func TestGraphicalRendererNeverUsesInnerHTML(t *testing.T) {
 			t.Fatalf("graphical renderer does not use safe DOM operation %s", required)
 		}
 	}
+}
+
+func TestProtocol02GETQueryPOSTBodyAndForm(t *testing.T) {
+	get, err := NewRequest("mailweb://demo.local/search?q=internet")
+	if err != nil || get.URI != "mailweb://demo.local/search?q=internet" || get.Body != nil {
+		t.Fatalf("unexpected GET request: %#v, %v", get, err)
+	}
+	post, err := NewRequestWithBody("POST", "mailweb://demo.local/hello", map[string]any{"name": "Levi"})
+	if err != nil || post.Headers["content-type"] != "application/json" || post.Body["name"] != "Levi" {
+		t.Fatalf("unexpected POST request: %#v, %v", post, err)
+	}
+	encoded := prettyJSON(post)
+	if !strings.Contains(encoded, `"body": {`) || !strings.Contains(encoded, `"name": "Levi"`) {
+		t.Fatalf("POST body was not serialized: %s", encoded)
+	}
+	form := Node{Type: "form", Method: "POST", Action: "/hello", Submit: "Send by post", Fields: []FormField{{Name: "name", Type: "text", Label: "Name"}}}
+	if err := validateNode(form); err != nil {
+		t.Fatalf("valid form rejected: %v", err)
+	}
+	form.Fields[0].Type = "password"
+	if err := validateNode(form); err == nil {
+		t.Fatal("unsupported form field type accepted")
+	}
+}
+
+func TestFormSubmissionBuildsGETQueryAndPOSTBody(t *testing.T) {
+	transport := &fakeTransport{}
+	session := NewBrowserSession(transport, "test")
+	session.DisablePrefetch()
+	if _, err := session.Navigate(context.Background(), "mailweb://demo.local/"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.SubmitForm(context.Background(), "GET", "/search?existing=yes", map[string]string{"q": "private mail"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.SubmitForm(context.Background(), "POST", "/hello", map[string]string{"name": "Levi"}); err != nil {
+		t.Fatal(err)
+	}
+	transport.mu.Lock()
+	requests := append([]MailWebRequest(nil), transport.requests...)
+	transport.mu.Unlock()
+	if requests[1].URI != "mailweb://demo.local/search?existing=yes&q=private+mail" || requests[1].Method != "GET" {
+		t.Fatalf("bad GET form request: %#v", requests[1])
+	}
+	if requests[2].Method != "POST" || requests[2].Body["name"] != "Levi" {
+		t.Fatalf("bad POST form request: %#v", requests[2])
+	}
+}
+
+func TestPrEmailPrefetchRulesAndNoRecursion(t *testing.T) {
+	transport := &fakeTransport{documents: map[string][]Node{
+		"/": {
+			{Type: "link", Label: "A", Href: "/a"}, {Type: "link", Label: "A duplicate", Href: "/a"},
+			{Type: "link", Label: "B", Href: "/b"}, {Type: "link", Label: "C", Href: "/c"},
+			{Type: "link", Label: "Over limit", Href: "/d"}, {Type: "link", Label: "External", Href: "mailweb://other.local/x"},
+			{Type: "button", Label: "Mutation-like action", Href: "/button"},
+		},
+		"/a": {{Type: "link", Label: "Must not recurse", Href: "/nested"}}, "/b": {}, "/c": {},
+	}}
+	session := NewBrowserSession(transport, "test")
+	if _, err := session.Navigate(context.Background(), "mailweb://demo.local/"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, time.Second, func() bool { return requestCount(transport) == 4 })
+	time.Sleep(20 * time.Millisecond)
+	transport.mu.Lock()
+	requests := append([]MailWebRequest(nil), transport.requests...)
+	transport.mu.Unlock()
+	counts := map[string]int{}
+	for _, request := range requests {
+		counts[request.URI]++
+	}
+	if counts["mailweb://demo.local/a"] != 1 || counts["mailweb://demo.local/b"] != 1 || counts["mailweb://demo.local/c"] != 1 {
+		t.Fatalf("eligible links not fetched once: %#v", counts)
+	}
+	for _, forbidden := range []string{"mailweb://demo.local/d", "mailweb://other.local/x", "mailweb://demo.local/button", "mailweb://demo.local/nested"} {
+		if counts[forbidden] != 0 {
+			t.Fatalf("forbidden URI was prefetched: %s", forbidden)
+		}
+	}
+}
+
+func TestPrEmailCacheHitExpiryAndReloadBypass(t *testing.T) {
+	transport := &fakeTransport{documents: map[string][]Node{"/": {{Type: "link", Label: "A", Href: "/a"}}, "/a": {}}}
+	session := NewBrowserSession(transport, "test")
+	session.cacheTTL = 40 * time.Millisecond
+	if _, err := session.Navigate(context.Background(), "mailweb://demo.local/"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, time.Second, func() bool { return requestCount(transport) == 2 })
+	state, err := session.NavigateReference(context.Background(), "/a")
+	if err != nil || state.Current.Delivery != "prEmail cache" || requestCount(transport) != 2 {
+		t.Fatalf("cache hit failed: %#v, %v", state.Current, err)
+	}
+	if _, err := session.Reload(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if requestCount(transport) != 3 {
+		t.Fatal("reload did not bypass cache")
+	}
+	if _, err := session.Navigate(context.Background(), "mailweb://demo.local/"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, time.Second, func() bool { return requestCount(transport) >= 4 })
+	time.Sleep(60 * time.Millisecond)
+	before := requestCount(transport)
+	if _, err := session.Navigate(context.Background(), "mailweb://demo.local/a"); err != nil {
+		t.Fatal(err)
+	}
+	if requestCount(transport) != before+1 {
+		t.Fatal("expired cache did not cause live request")
+	}
+}
+
+func TestPrEmailNeverRunsForPOSTNavigation(t *testing.T) {
+	transport := &fakeTransport{documents: map[string][]Node{"/": {{Type: "link", Label: "A", Href: "/a"}}}}
+	session := NewBrowserSession(transport, "test")
+	session.mu.Lock()
+	session.history = []NavigationResult{{URI: "mailweb://demo.local/", Request: MailWebRequest{Method: "GET"}}}
+	session.index = 0
+	session.mu.Unlock()
+	if _, err := session.SubmitForm(context.Background(), "POST", "/", map[string]string{"name": "Levi"}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(30 * time.Millisecond)
+	if requestCount(transport) != 1 {
+		t.Fatalf("POST caused speculative requests: %d", requestCount(transport))
+	}
+}
+
+func requestCount(transport *fakeTransport) int {
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+	return len(transport.requests)
+}
+func waitFor(t *testing.T, timeout time.Duration, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("condition not met before timeout")
 }

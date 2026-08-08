@@ -20,7 +20,8 @@
         { "$ref": "#/$defs/paragraph" },
         { "$ref": "#/$defs/link" },
         { "$ref": "#/$defs/image" },
-        { "$ref": "#/$defs/button" }
+        { "$ref": "#/$defs/button" },
+        { "$ref": "#/$defs/form" }
       ]
     },
     "heading": {
@@ -70,6 +71,30 @@
         "type": { "const": "button" },
         "label": { "type": "string" },
         "href": { "type": "string", "format": "uri-reference", "minLength": 1 }
+      }
+    },
+    "formField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "label"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$" },
+        "type": { "const": "text" },
+        "label": { "type": "string", "minLength": 1 },
+        "placeholder": { "type": "string" },
+        "required": { "type": "boolean" }
+      }
+    },
+    "form": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "method", "action", "fields", "submit"],
+      "properties": {
+        "type": { "const": "form" },
+        "method": { "enum": ["GET", "POST"] },
+        "action": { "type": "string", "format": "uri-reference", "minLength": 1 },
+        "fields": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "$ref": "#/$defs/formField" } },
+        "submit": { "type": "string", "minLength": 1 }
       }
     }
   }

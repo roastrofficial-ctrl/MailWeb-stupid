@@ -2,7 +2,7 @@
 
 MailWeb is an experiment in transporting web-style documents as private messages instead of serving them directly as HTTP responses. A page still feels like a normal website to the person browsing it, but each navigation is represented internally by a request message and a response message.
 
-This repository proves one complete round trip and deliberately does little else:
+This repository proves complete static and dynamic round trips and deliberately keeps their machinery visible:
 
 ```text
 Client -> message transport -> Laravel publisher -> message response -> client renderer
@@ -31,7 +31,11 @@ Start the graphical browser with SMTP as its carrier:
 ./postbox-ui
 ```
 
-Open <http://127.0.0.1:9847>, enter `mailweb://demo.local/`, and press **Send**. Every graphical navigation travels out and back through Mailpit. The browser includes back, forward, reload, safe structured document rendering, and a message inspector showing the exact request, response, timing, status, and transport.
+Open <http://127.0.0.1:9847>, enter `mailweb://demo.local/`, and press **Send**. Every live graphical navigation travels out and back through Mailpit. Visit `mailweb://demo.local/hello` to send a semantic form as a real MailWeb POST and receive Laravel's personalized reply.
+
+The browser includes back, forward, reload, safe structured document and form rendering, and a message inspector showing the exact request, response, method, body, timing, delivery source, status, and transport.
+
+It also demonstrates **prEmail**, optional speculative correspondence. After a user-opened page renders, Postbox may send up to three same-origin GET links ahead through the selected transport and retain their replies in memory for 60 seconds. Opening one is instant, while the inspector honestly shows the earlier SMTP round trip and its request ID. Forms, buttons, POST, cross-origin targets, recursion, and reload are excluded. This behavior is visible because speculative requests have privacy implications: they disclose interest in pages the user may never open.
 
 Set `MAILWEB_UI_TRANSPORT=http` when launching to use the direct development carrier instead.
 
@@ -72,4 +76,4 @@ Laravel's generated `vendor` directory is kept in the Docker-managed `demo-site-
 
 ## Scope
 
-There is intentionally no database, queue, event bus, cache, authentication, encryption, service discovery, or orchestration beyond Compose. Those concerns should only be introduced after the basic request-message/response-message model has proved useful.
+There is intentionally no database, queue, event bus, persistent cache, authentication, encryption, service discovery, or orchestration beyond Compose. prEmail's deliberately primitive cache lives only in one Postbox process and expires entries after 60 seconds.

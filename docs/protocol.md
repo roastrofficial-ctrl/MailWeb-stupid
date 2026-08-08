@@ -1,121 +1,109 @@
-# MailWeb Protocol v0.1
+# MailWeb Protocol v0.2
 
-## Status of this document
+## Status
 
-This document defines the experimental MailWeb Protocol v0.1. It is intentionally small and is expected to change as the first implementations are exercised.
+This document defines the experimental MailWeb Protocol v0.2. The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** carry their usual RFC meanings.
 
-The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**, and **MAY** describe requirements in the usual RFC sense.
+## 1. Scope and transport independence
 
-## 1. Purpose
+MailWeb describes application requests, responses, and safe semantic documents. It does not describe delivery. Identical JSON may travel through SMTP, HTTP, files, WebSockets, or another carrier. Carrier addresses, framing, retries, encryption, and connection state MUST NOT appear as protocol-specific fields.
 
-MailWeb transports requests for web-style documents and the corresponding document responses as private messages. The protocol defines the content of those messages only.
+Messages are UTF-8 JSON objects. The canonical [request](../packages/protocol/schema/mailweb-request.schema.json), [response](../packages/protocol/schema/mailweb-response.schema.json), and [document](../packages/protocol/schema/mailweb-document.schema.json) schemas are closed; unknown fields are invalid.
 
-A MailWeb message MUST NOT depend on its carrier. The same request or response can be carried through SMTP, HTTP, a file, a WebSocket, or another transport without changing any protocol field. Addressing, delivery, retries, framing, privacy, and encryption are transport concerns and are outside v0.1.
+## 2. Requests
 
-## 2. Representation
+Every request contains `mailweb: "0.2"`, a fresh uppercase ULID `id`, `method`, an absolute `mailweb://` URI, and string-valued `headers`.
 
-Messages are JSON objects encoded as UTF-8. Implementations MUST reject messages that do not satisfy the applicable JSON Schema.
+### 2.1 GET and query parameters
 
-The canonical schemas are:
-
-- [`MailWebRequest`](../packages/protocol/schema/mailweb-request.schema.json)
-- [`MailWebResponse`](../packages/protocol/schema/mailweb-response.schema.json)
-- [`MailWebDocument`](../packages/protocol/schema/mailweb-document.schema.json)
-
-All objects are closed: fields not defined by the schemas are invalid. This keeps v0.1 deterministic while it is experimental.
-
-## 3. MailWebRequest
-
-A request asks for one document.
+GET retrieves a document and MUST NOT contain `body`. Query parameters belong in the URI and use normal URI percent-encoding:
 
 ```json
 {
-  "mailweb": "0.1",
+  "mailweb": "0.2",
   "id": "01J00000000000000000000000",
   "method": "GET",
-  "uri": "mailweb://demo.local/",
+  "uri": "mailweb://demo.local/search?q=internet",
   "headers": {}
 }
 ```
 
-`mailweb` identifies the protocol version and MUST be `0.1`.
+The query is part of resource identity. Publishers parse it from `uri`; no parallel query structure exists.
 
-`id` is the request correlation identifier. It MUST be a canonical 26-character uppercase ULID. A sender MUST assign a new ID to each logical request. How transports deduplicate or retry a message is outside this specification.
+### 2.2 POST and request bodies
 
-`method` MUST be `GET`. v0.1 has no request body and defines no mutating operation.
-
-`uri` is the resource identifier and MUST be an absolute URI using the `mailweb` scheme. It identifies the publisher by authority and the document by path, query, and fragment. A transport MAY use the authority to choose a destination, but it MUST deliver the original URI unchanged.
-
-`headers` contains optional MailWeb metadata as string pairs. Header names are case-insensitive. Headers describe the request and MUST NOT contain carrier-specific routing or connection state. v0.1 defines no standard headers.
-
-## 4. MailWebResponse
-
-A response resolves exactly one request.
+POST submits application data. In v0.2, `body` is a JSON object and is REQUIRED for POST. A JSON body SHOULD be described by `content-type: application/json`:
 
 ```json
 {
-  "mailweb": "0.1",
-  "request_id": "01J00000000000000000000000",
-  "status": 200,
-  "document": {
-    "title": "Hello from MailWeb",
-    "body": []
-  }
+  "mailweb": "0.2",
+  "id": "01J00000000000000000000000",
+  "method": "POST",
+  "uri": "mailweb://demo.local/hello",
+  "headers": {"content-type": "application/json"},
+  "body": {"name": "Levi"}
 }
 ```
 
-`request_id` MUST exactly equal the `id` of the request being answered. This is the only request/response correlation mechanism defined by v0.1.
+Headers are MailWeb application metadata, not SMTP or HTTP headers. v0.2 defines no cookies, sessions, or authentication.
 
-`status` is an integer from 100 through 599. Its broad meaning follows familiar HTTP status classes: 2xx success, 3xx redirection, 4xx request failure, and 5xx publisher failure. MailWeb status is document metadata; it is not the status of the underlying transport. A transport-level success does not imply a MailWeb status of 200, and a MailWeb status of 404 does not imply a carrier failure.
+## 3. Responses and correlation
 
-`document` is REQUIRED for every response, including error responses, so a client always has something safe to render.
+A response contains `mailweb: "0.2"`, `request_id`, an integer `status` from 100 through 599, and a `document`. `request_id` MUST exactly match the request `id`. Status describes the MailWeb result, not carrier delivery. A document is required even for errors.
 
-## 5. MailWebDocument
+## 4. Documents
 
-A document has a plain-text `title` and an ordered `body` of nodes. Clients SHOULD use the title as the view or window title. Clients MUST render body nodes in array order.
+A document contains a plain-text `title` and ordered `body`. Text is never markup. Renderers MUST escape it and MUST NOT interpret HTML, Markdown, JavaScript, templates, or event handlers.
 
-Text values are plain Unicode text. They are never markup. A renderer MUST escape them for its output environment and MUST NOT interpret HTML, Markdown, JavaScript, template syntax, or event handlers contained in text.
+v0.2 supports:
 
-v0.1 supports five node types:
+- `heading`: `level` 1–6 and plain `text`.
+- `paragraph`: plain `text`.
+- `link`: plain `label` and URI-reference `href`.
+- `image`: URI-reference `src` and plain `alt`.
+- `button`: navigational `label` and `href`; it executes no code and submits no data.
+- `form`: semantic input and submission metadata described below.
 
-### 5.1 heading
+References resolve against the request URI. Clients MUST reject executable schemes and MAY restrict external resources.
 
-A heading contains `text` and an integer `level` from 1 through 6. Level 1 is the most prominent.
+### 4.1 Form node
 
-### 5.2 paragraph
+```json
+{
+  "type": "form",
+  "method": "POST",
+  "action": "/hello",
+  "fields": [{
+    "name": "name",
+    "type": "text",
+    "label": "What should we call you?",
+    "placeholder": "Your name",
+    "required": true
+  }],
+  "submit": "Send by post"
+}
+```
 
-A paragraph contains plain `text`.
+v0.2 permits GET and POST forms and `text` fields only. Field names within a form MUST be unique. The renderer owns native controls; publishers supply no HTML or scripts.
 
-### 5.3 link
+On GET submission, the client URI-encodes field values into the action URI query and sends a bodyless GET. On POST submission, it sends field names and string values as the request JSON body. Form submissions use the selected transport exactly like other navigation.
 
-A link contains a plain-text `label` and an `href` URI reference. Activating it requests or opens the referenced resource according to client policy.
+## 5. Processing and safety
 
-### 5.4 image
+The client constructs a valid request; a transport carries it unchanged; the publisher routes method and URI, creates a correlated response, and a transport returns it unchanged. The client validates version, correlation, status, and every document node before rendering.
 
-An image contains a `src` URI reference and plain-text `alt` text. Clients that cannot or will not load the image MUST present the alternative text.
+“Private” describes the messaging model, not a v0.2 security guarantee. Deployments obtain confidentiality, identity, integrity, and access control from their environment. Every publisher document remains untrusted.
 
-### 5.5 button
+## 6. Compatibility
 
-A button contains a plain-text `label` and an `href` URI reference. In v0.1 a button is navigational: activating it has the same protocol effect as activating a link. It does not run code and does not submit data.
+v0.1 defined bodyless GET only and five non-form nodes. An implementation MAY continue accepting valid v0.1 request/response pairs. It MUST NOT silently interpret a mixed-version pair or unknown fields as v0.2.
 
-Relative URI references in `href` and `src` are resolved against the request URI. Clients MUST NOT execute `javascript:` references or other executable URI schemes. Clients MAY restrict external schemes and resources according to local policy.
+## 7. Experimental client behavior: prEmail
 
-## 6. Processing model
+prEmail is optional speculative GET prefetching. It is **not part of the protocol** and a conforming client may never prefetch.
 
-1. A client creates a valid `MailWebRequest` with a fresh ID.
-2. A transport delivers the request to a publisher without altering its fields.
-3. The publisher resolves the URI and creates one valid `MailWebResponse` containing the request ID.
-4. A transport returns the response without altering its fields.
-5. The client verifies the version and correlation ID, then renders the structured document according to the response status.
+This implementation considers at most three explicit, same-origin MailWeb links after user navigation. It uses the normal request and selected transport, caches successful GET responses in memory for 60 seconds, deduplicates in-flight URIs, and never follows forms, buttons, external links, POST actions, or links discovered inside a prefetched response. Reload bypasses the cache.
 
-The protocol makes no claim about whether these steps are synchronous, asynchronous, online, queued, or file-based.
+Clients SHOULD expose this activity and distinguish live delivery from cached correspondence. They MUST NOT claim that a cache hit avoided the earlier transport exchange.
 
-## 7. Security and privacy
-
-The word “private” describes the intended message model, not a security guarantee in v0.1. Confidentiality, authentication, integrity, sender identity, access control, and replay protection are not protocol features yet. A deployment MUST obtain any required guarantees from its chosen transport or environment.
-
-Structured nodes deliberately exclude arbitrary HTML and JavaScript. Renderers MUST still escape all text, validate URI schemes, limit resource use, and treat every received document as untrusted input.
-
-## 8. Extensibility
-
-Unknown fields and unknown node types are invalid in v0.1. A future protocol version can add capabilities alongside an explicit version change. Implementations MUST NOT silently reinterpret a message from an unsupported version.
+Speculative fetching has privacy implications: it contacts publishers for resources the user may never choose to visit. Clients SHOULD make prefetching visible and SHOULD offer policy control before prEmail progresses beyond experimentation.

@@ -4,14 +4,17 @@ namespace App\MailWeb;
 
 final class Publisher
 {
-    public function respond(array $request): array
+    public function respond(MailWebRequest $request): array
     {
-        $path = parse_url($request['uri'], PHP_URL_PATH) ?: '/';
-        $status = in_array($path, ['/', '/proof', '/why'], true) ? 200 : 404;
+        $path = $request->path;
+        $status = in_array($path, ['/', '/proof', '/why', '/hello'], true) ? 200 : 404;
+		$submittedName = $request->body['name'] ?? '';
+		$name = is_string($submittedName) ? trim(mb_substr($submittedName, 0, 80)) : '';
         $title = match ($path) {
             '/' => 'Dear Internet',
             '/proof' => 'You just clicked a link',
             '/why' => 'The Internet Is Not HTTP',
+			'/hello' => $request->method === 'POST' ? 'A personal reply' : 'An introduction',
             default => 'Document not found',
         };
         $body = match ($path) {
@@ -21,6 +24,9 @@ final class Publisher
                 ['type' => 'paragraph', 'text' => "It isn't."],
                 ['type' => 'paragraph', 'text' => "Everything you're reading arrived as a private message."],
                 ['type' => 'button', 'label' => 'Prove it', 'href' => '/proof'],
+				['type' => 'link', 'label' => 'Correspond with us', 'href' => '/hello'],
+				['type' => 'link', 'label' => 'Read the proof', 'href' => '/proof'],
+				['type' => 'link', 'label' => 'Why this nonsense?', 'href' => '/why'],
             ],
             '/proof' => [
                 ['type' => 'heading', 'level' => 1, 'text' => 'You just clicked a link.'],
@@ -39,6 +45,20 @@ final class Publisher
                 ['type' => 'paragraph', 'text' => "That's the point."],
                 ['type' => 'link', 'label' => 'Write home', 'href' => '/'],
             ],
+			'/hello' => $request->method === 'POST' ? [
+				['type' => 'heading', 'level' => 1, 'text' => 'Dear '.($name !== '' ? $name : 'correspondent').','],
+				['type' => 'paragraph', 'text' => 'Lovely to correspond.'],
+				['type' => 'paragraph', 'text' => 'Your introduction travelled here as a private POST, and this reply travelled back the same way.'],
+				['type' => 'link', 'label' => 'Write another letter', 'href' => '/hello'],
+			] : [
+				['type' => 'heading', 'level' => 1, 'text' => 'Dear Internet'],
+				['type' => 'paragraph', 'text' => "What's your name?"],
+				['type' => 'form', 'method' => 'POST', 'action' => '/hello', 'fields' => [[
+					'name' => 'name', 'type' => 'text', 'label' => 'What should we call you?',
+					'placeholder' => 'Your name', 'required' => true,
+				]], 'submit' => 'Send by post'],
+				['type' => 'link', 'label' => 'Return home', 'href' => '/'],
+			],
             default => [
                 ['type' => 'heading', 'level' => 1, 'text' => 'Document not found'],
                 ['type' => 'paragraph', 'text' => "The publisher has no document for {$path}."],
@@ -47,8 +67,8 @@ final class Publisher
         };
 
         return [
-            'mailweb' => '0.1',
-            'request_id' => $request['id'],
+			'mailweb' => $request->version,
+			'request_id' => $request->id,
             'status' => $status,
             'document' => ['title' => $title, 'body' => $body],
         ];

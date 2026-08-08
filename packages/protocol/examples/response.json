@@ -1,33 +1,25 @@
 {
-  "mailweb": "0.1",
+  "mailweb": "0.2",
   "request_id": "01J00000000000000000000000",
   "status": 200,
   "document": {
-    "title": "Hello from MailWeb",
+    "title": "An introduction",
     "body": [
       {
         "type": "heading",
         "level": 1,
-        "text": "Hello, Internet"
+        "text": "Dear Internet"
       },
       {
         "type": "paragraph",
-        "text": "This page arrived as a private message."
+        "text": "What's your name?"
       },
       {
-        "type": "link",
-        "label": "About this nonsense",
-        "href": "/about"
-      },
-      {
-        "type": "image",
-        "src": "/mailweb-mark.png",
-        "alt": "The MailWeb mark"
-      },
-      {
-        "type": "button",
-        "label": "Read the introduction",
-        "href": "/about"
+        "type": "form",
+        "method": "POST",
+        "action": "/hello",
+        "fields": [{"name": "name", "type": "text", "label": "What should we call you?", "placeholder": "Your name", "required": true}],
+        "submit": "Send by post"
       }
     ]
   }
