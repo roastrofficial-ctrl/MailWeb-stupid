@@ -2,14 +2,23 @@ services:
   postbox:
     build:
       context: ./apps/postbox
+      target: development
+    working_dir: /app
+    volumes:
+      - ./apps/postbox:/app
+    profiles: ["cli"]
     environment:
       MAILWEB_PUBLISHER_URL: http://demo-site:8000/mailweb/messages
-      PORT: "8080"
-    ports:
-      - "8080:8080"
+      MAILWEB_SMTP_ADDRESS: mailpit:1025
+      MAILWEB_MAILPIT_URL: http://mailpit:8025
+      MAILWEB_PUBLISHER_MAILBOX: browse@demo.local
     depends_on:
       demo-site:
         condition: service_healthy
+      mailpit:
+        condition: service_healthy
+      publisher-worker:
+        condition: service_started
 
   demo-site:
     build:
@@ -21,9 +30,45 @@ services:
       LOG_CHANNEL: stderr
     ports:
       - "127.0.0.1:8081:8000"
+    volumes:
+      - ./apps/demo-site:/app
+      - demo-site-vendor:/app/vendor
     healthcheck:
       test: ["CMD", "php", "artisan", "mailweb:health"]
       interval: 2s
       timeout: 2s
       retries: 15
 
+  publisher-worker:
+    build:
+      context: ./apps/demo-site
+    command: ["php", "artisan", "mailweb:consume"]
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      LOG_CHANNEL: stderr
+      MAILWEB_MAILPIT_URL: http://mailpit:8025
+      MAILWEB_SMTP_HOST: mailpit
+      MAILWEB_SMTP_PORT: "1025"
+      MAILWEB_PUBLISHER_MAILBOX: browse@demo.local
+    volumes:
+      - ./apps/demo-site:/app
+      - demo-site-vendor:/app/vendor
+    depends_on:
+      mailpit:
+        condition: service_healthy
+
+  mailpit:
+    image: axllent/mailpit:v1.30.0
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:8025/readyz"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+volumes:
+  demo-site-vendor:

@@ -1,45 +1,68 @@
 package main
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
 
-func TestRenderCompletesMessageRoundTrip(t *testing.T) {
-	publisher := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request requestMessage
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Fatal(err)
-		}
-		_ = json.NewEncoder(w).Encode(responseMessage{
-			MailWeb: "0.1", RequestID: request.ID, Status: 200,
-			Document: document{Title: "Hello", Body: []node{{Type: "heading", Level: 1, Text: "Hello"}}},
-		})
-	}))
-	defer publisher.Close()
+type fakeTransport struct {
+	requests []MailWebRequest
+}
 
-	s := &server{publisherURL: publisher.URL, client: publisher.Client()}
-	recorder := httptest.NewRecorder()
-	s.render(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
-
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "<h1>Hello</h1>") {
-		t.Fatalf("unexpected response: %d %q", recorder.Code, recorder.Body.String())
+func (transport *fakeTransport) Exchange(_ context.Context, request MailWebRequest) (MailWebResponse, error) {
+	transport.requests = append(transport.requests, request)
+	path := strings.TrimPrefix(request.URI, "mailweb://demo.local")
+	if path == "/" {
+		return MailWebResponse{MailWeb: "0.1", RequestID: request.ID, Status: 200, Document: &MailWebDocument{
+			Title: "Home", Body: []Node{{Type: "heading", Level: 1, Text: "Hello"}, {Type: "link", Label: "About", Href: "/about"}},
+		}}, nil
 	}
-	if recorder.Header().Get("X-MailWeb-Request-ID") == "" {
-		t.Fatal("request correlation ID was not exposed")
+	return MailWebResponse{MailWeb: "0.1", RequestID: request.ID, Status: 200, Document: &MailWebDocument{
+		Title: "About", Body: []Node{{Type: "heading", Level: 1, Text: "About MailWeb"}},
+	}}, nil
+}
+
+func TestBrowseNavigatesBetweenMailWebDocuments(t *testing.T) {
+	transport := &fakeTransport{}
+	var output bytes.Buffer
+	if err := Browse(context.Background(), transport, "mailweb://demo.local/", strings.NewReader("1\n"), &output); err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.requests) != 2 || transport.requests[1].URI != "mailweb://demo.local/about" {
+		t.Fatalf("unexpected requests: %#v", transport.requests)
+	}
+	if !strings.Contains(output.String(), "Hello") || !strings.Contains(output.String(), "About MailWeb") {
+		t.Fatalf("documents were not rendered: %s", output.String())
 	}
 }
 
-func TestRenderDocumentEscapesTextAndRejectsScriptURIs(t *testing.T) {
-	output, err := renderDocument(document{Title: "<title>", Body: []node{{Type: "paragraph", Text: "<script>"}}})
-	if err != nil || strings.Contains(string(output), "<script>") {
-		t.Fatal("plain text was not escaped")
+func TestValidateResponseRejectsUnknownNodesAndBadCorrelation(t *testing.T) {
+	request, _ := NewRequest("mailweb://demo.local/")
+	response := MailWebResponse{MailWeb: "0.1", RequestID: "wrong", Status: 200, Document: &MailWebDocument{}}
+	if ValidateResponse(request, response) == nil {
+		t.Fatal("bad correlation was accepted")
 	}
-	_, err = renderDocument(document{Title: "Unsafe", Body: []node{{Type: "link", Label: "Run", Href: "javascript:alert(1)"}}})
-	if err == nil {
-		t.Fatal("executable URI was accepted")
+	response.RequestID = request.ID
+	response.Document.Body = []Node{{Type: "html", Text: "<script>"}}
+	if ValidateResponse(request, response) == nil {
+		t.Fatal("unknown node was accepted")
+	}
+}
+
+func TestParseMailWebResponseRequiresMediaTypeAndDecodesJSON(t *testing.T) {
+	raw := buildMailMessage("browse@demo.local", "postbox@client.local", "MailWeb response", []byte(`{"mailweb":"0.1","request_id":"01J00000000000000000000000","status":200,"document":{"title":"Hello","body":[]}}`))
+	response, err := parseMailWebResponse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.RequestID != "01J00000000000000000000000" || response.Document == nil || response.Document.Title != "Hello" {
+		t.Fatalf("unexpected response: %#v", response)
+	}
+
+	invalid := strings.Replace(string(raw), "application/mailweb+json", "text/plain", 1)
+	if _, err := parseMailWebResponse([]byte(invalid)); err == nil {
+		t.Fatal("non-MailWeb media type was accepted")
 	}
 }

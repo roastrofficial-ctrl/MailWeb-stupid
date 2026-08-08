@@ -6,28 +6,30 @@ This repository proves one complete round trip and deliberately does little else
 
 ```text
 Client -> message transport -> Laravel publisher -> message response -> client renderer
-browser    Go postbox          demo-site          JSON envelope       Go postbox
+terminal   Go postbox          demo-site          JSON document       Go postbox
 ```
 
-For this first experiment, the message transport is a synchronous HTTP POST carrying JSON between two local containers. HTTP is only the local carrier; the application contract is the message envelope documented in [`packages/protocol`](packages/protocol). The postbox is the only service exposed to the browser, and the Laravel application acts as the document publisher.
+MailWeb messages are independent of their carrier. This repository now provides two development transports behind the same interface: a direct synchronous HTTP exchange and an SMTP exchange through Mailpit. The application contract remains only the request and response documented in [`packages/protocol`](packages/protocol).
 
 ## Repository layout
 
-- `apps/postbox` — Go client gateway, message transport, and renderer
+- `apps/postbox` — Go terminal client, local transport, protocol validator, and renderer
 - `apps/demo-site` — Laravel document publisher
 - `packages/protocol` — protocol notes, JSON Schema, and examples
 - `packages/laravel-mailweb` — placeholder for a future Laravel integration package
 - `extension` — placeholder for a future browser extension; it is intentionally not implemented
 
-## Run locally
+## Browse locally
 
 Docker and Docker Compose are the only host requirements.
 
+Launch the terminal postbox with a MailWeb URI:
+
 ```bash
-docker compose up --build
+./postbox mailweb://demo.local/
 ```
 
-Open <http://localhost:8080>. The rendered page includes its MailWeb message ID, making the round trip visible. To inspect the publisher directly:
+Enter `1` to follow the displayed link between `/` and `/about`, or `q` to quit. The launcher starts the Laravel publisher automatically. To inspect the publisher directly:
 
 ```bash
 curl -s http://localhost:8081/mailweb/messages \
@@ -36,7 +38,23 @@ curl -s http://localhost:8081/mailweb/messages \
   -d @packages/protocol/examples/request.json
 ```
 
-The publisher's port is exposed only as a local debugging convenience. Normal browsing goes through postbox on port `8080`.
+The command above uses the original direct HTTP development transport. To make every navigation travel out and back as actual email through SMTP:
+
+```bash
+./postbox --transport smtp mailweb://demo.local/
+```
+
+Postbox prints `Waiting for the publisher to reply...` while polling its generated mailbox. Browse the underlying request and response emails in Mailpit at <http://localhost:8025>. The default reply timeout is 15 seconds and can be changed with `--timeout`, for example `--timeout 30s`.
+
+The publisher's HTTP port is exposed only as a local debugging convenience. Normal browsing goes through the terminal postbox.
+
+Both carriers implement the small Go `Transport` interface in `apps/postbox/cmd/postbox/transport.go`. HTTP endpoints, SMTP addresses, MIME headers, and Mailpit polling never appear in MailWeb request or response objects.
+
+## Local development
+
+Compose bind-mounts `apps/postbox` at `/app` in the Go container and `apps/demo-site` at `/app` in the Laravel container. Each `./postbox` invocation compiles the current Go source. Laravel reads PHP files on each request.
+
+Laravel's generated `vendor` directory is kept in the Docker-managed `demo-site-vendor` volume instead of being written into the repository.
 
 ## Scope
 
