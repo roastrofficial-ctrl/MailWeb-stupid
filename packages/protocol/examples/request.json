@@ -1,0 +1,7 @@
+{
+  "mailweb": "0.1",
+  "id": "01J00000000000000000000000",
+  "method": "GET",
+  "uri": "mailweb://demo.local/",
+  "headers": {}
+}

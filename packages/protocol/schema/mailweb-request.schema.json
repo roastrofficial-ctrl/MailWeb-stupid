@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MailWebRequest",
+  "description": "A transport-independent request for a MailWeb document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mailweb", "id", "method", "uri", "headers"],
+  "properties": {
+    "mailweb": { "const": "0.1" },
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+      "description": "A canonical, uppercase ULID used to correlate the response."
+    },
+    "method": { "const": "GET" },
+    "uri": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^mailweb://",
+      "description": "The absolute mailweb URI of the requested document."
+    },
+    "headers": {
+      "type": "object",
+      "description": "Protocol metadata. Header names are case-insensitive.",
+      "propertyNames": { "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$" },
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}

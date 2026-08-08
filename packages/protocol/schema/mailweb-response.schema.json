@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MailWebResponse",
+  "description": "A transport-independent response containing a MailWeb document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mailweb", "request_id", "status", "document"],
+  "properties": {
+    "mailweb": { "const": "0.1" },
+    "request_id": {
+      "type": "string",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+      "description": "The exact id from the corresponding MailWebRequest."
+    },
+    "status": { "type": "integer", "minimum": 100, "maximum": 599 },
+    "document": { "$ref": "mailweb-document.schema.json" }
+  }
+}

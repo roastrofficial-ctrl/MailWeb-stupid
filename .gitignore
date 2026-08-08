@@ -1,0 +1,9 @@
+.DS_Store
+.env
+vendor/
+storage/*.key
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/logs/*
+

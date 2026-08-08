@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MailWebDocument",
+  "description": "A safe, declarative document made from MailWeb nodes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "body"],
+  "properties": {
+    "title": { "type": "string", "maxLength": 512 },
+    "body": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/node" }
+    }
+  },
+  "$defs": {
+    "node": {
+      "oneOf": [
+        { "$ref": "#/$defs/heading" },
+        { "$ref": "#/$defs/paragraph" },
+        { "$ref": "#/$defs/link" },
+        { "$ref": "#/$defs/image" },
+        { "$ref": "#/$defs/button" }
+      ]
+    },
+    "heading": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "level", "text"],
+      "properties": {
+        "type": { "const": "heading" },
+        "level": { "type": "integer", "minimum": 1, "maximum": 6 },
+        "text": { "type": "string" }
+      }
+    },
+    "paragraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "text"],
+      "properties": {
+        "type": { "const": "paragraph" },
+        "text": { "type": "string" }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "label", "href"],
+      "properties": {
+        "type": { "const": "link" },
+        "label": { "type": "string" },
+        "href": { "type": "string", "format": "uri-reference", "minLength": 1 }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "src", "alt"],
+      "properties": {
+        "type": { "const": "image" },
+        "src": { "type": "string", "format": "uri-reference", "minLength": 1 },
+        "alt": { "type": "string" }
+      }
+    },
+    "button": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "label", "href"],
+      "properties": {
+        "type": { "const": "button" },
+        "label": { "type": "string" },
+        "href": { "type": "string", "format": "uri-reference", "minLength": 1 }
+      }
+    }
+  }
+}

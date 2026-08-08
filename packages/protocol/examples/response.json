@@ -1,0 +1,34 @@
+{
+  "mailweb": "0.1",
+  "request_id": "01J00000000000000000000000",
+  "status": 200,
+  "document": {
+    "title": "Hello from MailWeb",
+    "body": [
+      {
+        "type": "heading",
+        "level": 1,
+        "text": "Hello, Internet"
+      },
+      {
+        "type": "paragraph",
+        "text": "This page arrived as a private message."
+      },
+      {
+        "type": "link",
+        "label": "About this nonsense",
+        "href": "/about"
+      },
+      {
+        "type": "image",
+        "src": "/mailweb-mark.png",
+        "alt": "The MailWeb mark"
+      },
+      {
+        "type": "button",
+        "label": "Read the introduction",
+        "href": "/about"
+      }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+services:
+  postbox:
+    build:
+      context: ./apps/postbox
+    environment:
+      MAILWEB_PUBLISHER_URL: http://demo-site:8000/mailweb/messages
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      demo-site:
+        condition: service_healthy
+
+  demo-site:
+    build:
+      context: ./apps/demo-site
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      LOG_CHANNEL: stderr
+    ports:
+      - "127.0.0.1:8081:8000"
+    healthcheck:
+      test: ["CMD", "php", "artisan", "mailweb:health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
