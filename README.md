@@ -6,6 +6,8 @@ There's a fine line between absurd and profound. Skirting that line is very huma
 
 I'm a senior Laravel, architecty guy; so the planning, features and **most** engineering was me. The grunt work was my hard working agent (including the awful job of taking my terse, borderline illegible explanation scribbled hastily into several Obsidian documents and expanding it into this readme. I leave it in tact, em dashes and all because like most engineers, I don't do words so good.)
 
+This is a WiP. I'll keep fruitlessly working on this because I find the paradigm shift intersting, engaging and funny. 
+
 > **What if browsing the web was technically just checking your email?**
 
 MailWeb is a deliberately absurd experiment in transporting web-style documents as private messages instead of serving them directly as HTTP responses.
@@ -484,3 +486,523 @@ It's to demonstrate that **the Internet is not HTTP**, that presentation and tra
 Or, put another way:
 
 > **This is ridiculous. That's the point.**
+
+... oh, you're still here... enjoy these rambling (pseudo)philosophical thoughts on this abomination.
+
+## Questions MailWeb accidentally asks
+
+MailWeb began with a deliberately ridiculous premise:
+
+> What if browsing the web was technically just checking your email?
+
+Actually implementing that premise has produced some less ridiculous questions.
+
+MailWeb is not presented as the answer to any of them. Most of these ideas have analogues in existing distributed systems, privacy systems, capability models, message-oriented architectures and networking research.
+
+But making **message passing the browsing model** puts several normally invisible assumptions about the Web in an unusual light.
+
+So, having built the stupid thing, here are some of the questions it has started asking.
+
+### What if a website had no public web server?
+
+A MailWeb publisher does not necessarily need to expose its application directly to the Internet.
+
+A deployment could look like:
+
+```text
+Internet
+   |
+   v
+mail infrastructure
+   |
+   v
+MailWeb validator
+   |
+   v
+message boundary
+   |
+   v
+private application
+```
+
+The application could have no publicly accessible HTTP interface at all.
+
+This does not make it unhackable.
+
+It moves the attack surface.
+
+Mail servers, MIME parsers, protocol parsers, validators, queues and the application itself all remain software and therefore remain capable of having vulnerabilities.
+
+But it raises an interesting architectural question:
+
+> What happens to the security model of a web application when interacting with it no longer requires exposing the application itself to the public network?
+
+Message queues, gateways and brokers already create boundaries like this.
+
+MailWeb's only unusual contribution is making that boundary part of the browsing model.
+
+### What if opening a website didn't mean executing somebody else's program?
+
+The modern Web routinely delivers executable code to the reader.
+
+MailWeb currently does not.
+
+A publisher sends semantic intent:
+
+```text
+heading
+paragraph
+navigation
+image
+form
+button
+template
+presentation hint
+```
+
+Postbox decides how those things behave and how they are rendered.
+
+That produces a very different trust boundary.
+
+A correspondent can ask Postbox to display a button.
+
+They cannot define arbitrary JavaScript for that button to execute.
+
+A correspondent can suggest presentation.
+
+They do not own the reader's screen.
+
+This raises a broader question:
+
+> How much of the modern browser security problem exists because documents evolved into remotely supplied applications?
+
+Or, in MailWeb terminology:
+
+> The correspondent doesn't get to execute code in your house merely because you opened their letter.
+
+### What if browsing didn't require the reader and publisher to know each other's network address?
+
+MailWeb does not eliminate IP networking.
+
+The infrastructure underneath still needs networks, addresses and routing.
+
+But the **reader and publisher do not necessarily need a direct network relationship with each other**.
+
+A reader could communicate through a Post Office or relay:
+
+```text
+Reader
+   |
+   v
+Post Office
+   |
+   | correspondence
+   v
+Publisher
+```
+
+and the reply can return through the same messaging infrastructure.
+
+The publisher needs a return address.
+
+It does not inherently need the reader's IP address.
+
+Likewise, the reader needs a MailWeb address.
+
+It does not inherently need to establish a connection to the publisher's application server.
+
+That suggests a more precise question than "IP-less browsing":
+
+> What would browsing look like if network location stopped being part of the relationship between reader and publisher?
+
+The Internet underneath still has IP addresses.
+
+The correspondence above it might not need to care.
+
+### What if identity were scoped to a conversation?
+
+An ordinary email address is usually a terrible anonymity mechanism.
+
+MailWeb does not change that.
+
+But a return address does not necessarily need to represent a permanent identity.
+
+Postbox could theoretically use:
+
+```text
+one permanent address
+
+or
+
+one address per correspondent
+
+or
+
+one address per browsing session
+
+or
+
+one address capable of receiving exactly one reply
+```
+
+A publisher might therefore know:
+
+```text
+reply-to: 7f82a1@postbox.example
+```
+
+without that address necessarily being useful for correlating the same reader across unrelated correspondents.
+
+This is not anonymity by itself.
+
+Mail providers, relays, timing information and other metadata can still reveal or correlate activity.
+
+But it raises another question:
+
+> What if identity on the Internet were something the client deliberately scoped rather than something every service tried to reconstruct?
+
+### What if the browser owned the copy it received?
+
+Web browsing usually treats a page as something that exists somewhere else.
+
+You request it, render it, perhaps cache it, and request it again later.
+
+Correspondence suggests a subtly different model:
+
+> Somebody sent you something.
+
+Postbox already contains received correspondence and reusable stationery.
+
+That naturally raises the possibility that previously received documents belong to the reader's local archive.
+
+A publisher can send a newer version.
+
+It cannot retroactively alter the copy you previously received.
+
+Conceptually:
+
+```text
+ABOUT
+
+8 August 2026
+current correspondence
+
+2 August 2026
+previous correspondence
+
+27 July 2026
+previous correspondence
+```
+
+This starts to make browser history look less like a list of places visited and more like an archive of information actually received.
+
+Which raises a surprisingly philosophical question:
+
+> When you read something on the Internet, should you retain the thing you read, or merely the address where it used to exist?
+
+### What if history could also deliberately disappear?
+
+Correspondence naturally creates an archive.
+
+But because Postbox owns that archive, retention could also become an explicit reader decision.
+
+For example:
+
+```text
+RETENTION
+
+Keep correspondence
+Keep for this session
+Destroy after reading
+Destroy after 24 hours
+```
+
+This would not magically erase copies, metadata or logs held elsewhere in the delivery chain.
+
+It is not guaranteed anonymity or forensic invisibility.
+
+But it suggests a cleaner local model for private browsing:
+
+> Incognito could mean choosing not to retain the correspondence, rather than attempting to clean up dozens of different kinds of browser state afterwards.
+
+### What if "loading a page" didn't require waiting?
+
+HTTP browsing strongly encourages a synchronous mental model:
+
+```text
+request
+   |
+   wait
+   |
+response
+```
+
+Correspondence does not.
+
+It naturally permits:
+
+```text
+request
+
+...go and do something else...
+
+response
+```
+
+MailWeb currently tries to make correspondence fast enough to feel like conventional browsing.
+
+But perhaps that is the wrong thing to optimise for every interaction.
+
+Some requests are naturally asynchronous:
+
+```text
+"Tell me when this train platform is announced."
+
+"Send me the finished report."
+
+"Let me know when these tickets become available."
+
+"Tell me when this job finishes."
+
+"Send me the result when the render completes."
+
+"Reply when somebody approves this request."
+
+"Tell me when this parcel changes state."
+
+"Send me tomorrow's forecast when it becomes relevant."
+```
+
+Today these experiences are implemented using mixtures of polling, background jobs, WebSockets, push notification infrastructure, email, mobile notifications and application-specific state.
+
+A correspondence-native protocol makes another model possible:
+
+```text
+request
+   |
+   v
+202 — correspondence accepted
+
+Postbox closes the interaction.
+
+...four hours later...
+
+new correspondence arrives
+```
+
+At that point the distinction between a website response and a notification becomes strangely blurry.
+
+Which raises the question:
+
+> Why must a response arrive while the person who requested it is still waiting?
+
+### What if subscriptions were just permission to keep writing?
+
+Push notifications are usually a separate subsystem bolted onto an application.
+
+Correspondence already has a destination.
+
+A future MailWeb interaction could theoretically include an explicit permission:
+
+```text
+You may write to me again about this request:
+
+[x] when its status changes
+
+Expires:
+tomorrow
+```
+
+The publisher now has a narrowly scoped capability to send further correspondence.
+
+The reader can revoke it.
+
+This turns "push notifications" into something conceptually simpler:
+
+> I gave this correspondent permission to write back.
+
+The difficult questions — spam, authentication, revocation, abuse and privacy — remain very real.
+
+But the interaction model becomes unusually understandable.
+
+### What if a browser cache were literally a postbox?
+
+prEmail already performs speculative correspondence.
+
+It requests likely destinations ahead of time and files their replies locally.
+
+When the reader later selects one, Postbox does not need to contact the publisher:
+
+```text
+You click About
+
+Postbox checks the archive
+
+Correspondence already received.
+
+Open.
+```
+
+MailWeb 0.4 extends the same metaphor to templates.
+
+A correspondent sends its stationery once.
+
+Later letters contain only the changing content.
+
+The result is technically recognisable as caching and template reuse.
+
+But the correspondence model makes both concepts surprisingly tangible:
+
+> We already received that letter.
+
+and:
+
+> We already have their stationery.
+
+This raises another question:
+
+> How many complicated browser concepts become easier to understand when they are represented as things the reader actually possesses?
+
+### What if email were an application message bus?
+
+This is probably a terrible idea.
+
+Which means MailWeb is contractually obligated to ask it.
+
+SMTP is already a federated store-and-forward messaging system.
+
+It provides concepts including:
+
+- globally routable addresses
+- asynchronous delivery
+- intermediaries
+- retries
+- buffering
+- federation between independently operated systems
+- infrastructure that has existed for decades
+
+Application developers routinely introduce RabbitMQ, Kafka, SQS and other messaging systems when they need asynchronous communication.
+
+Those systems provide capabilities and guarantees that email absolutely does not magically reproduce: ordering, consumer groups, high-throughput logs, transactional semantics and many other things matter enormously.
+
+SMTP is not Kafka.
+
+Please do not replace Kafka with Postfix because of this README.
+
+But MailWeb still makes the comparison difficult to ignore:
+
+```text
+Application A
+     |
+     | message
+     v
+address@example.net
+     |
+     | store and forward
+     v
+Application B
+```
+
+So there is an entertaining technical question hiding underneath the terrible engineering proposal:
+
+> How much application messaging infrastructure already exists inside the world's email infrastructure?
+
+And, perhaps more dangerously:
+
+> What is the smallest useful message-oriented application you could build using nothing but ordinary email semantics?
+
+No production systems were harmed in the asking of this question.
+
+Yet.
+
+### Does a MailWeb page actually exist?
+
+This may be the strangest question the experiment has produced.
+
+The conventional Web encourages us to think:
+
+```text
+URL -> resource
+```
+
+MailWeb increasingly looks more like:
+
+```text
+address + request
+       |
+       v
+correspondence
+       |
+       v
+reply
+```
+
+A MailWeb URI may therefore be less like the location of a document and more like a question you can ask a correspondent.
+
+The answer might depend on:
+
+- who asked
+- when they asked
+- previous correspondence
+- what stationery they already possess
+- the contents of their request
+- whether Postbox asked speculatively
+- whether the answer had already arrived
+
+The resulting document can then continue to exist in the reader's Postbox even if the publisher subsequently changes or disappears.
+
+So:
+
+> Is MailWeb retrieving resources?
+
+or:
+
+> Is MailWeb conducting conversations that happen to render as documents?
+
+We genuinely don't know which description is more useful yet.
+
+### What if websites were correspondence rather than remote places?
+
+That may be the broader question underneath all of this.
+
+MailWeb began by separating transport from presentation.
+
+Implementing it has started separating several other things that conventional browsing tends to bundle together:
+
+```text
+network location      != identity
+
+document              != executable application
+
+publisher intent      != client presentation
+
+request               != synchronous waiting
+
+navigation            != direct connection
+
+history               != list of URLs
+
+cache                 != invisible implementation detail
+
+response              != something that must arrive immediately
+```
+
+None of these observations demonstrate that MailWeb is better than the Web.
+
+In many cases the conventional Web made its trade-offs for extremely good reasons.
+
+MailWeb has its own unpleasant questions around latency, spam, abuse, storage, freshness, large media, authentication, delivery guarantees, traffic analysis, discovery, revocation and realtime interaction.
+
+But that is becoming the interesting part of the experiment.
+
+The original joke was:
+
+> **What if websites arrived by email?**
+
+The more useful question may turn out to be:
+
+> **Which properties of the Web are fundamental to browsing, and which are simply consequences of the architecture we happened to build it with?**
+
+MailWeb does not have an answer.
+
+For the moment, it is enjoying making the question unnecessarily tangible.
