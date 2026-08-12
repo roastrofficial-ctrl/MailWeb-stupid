@@ -1,6 +1,6 @@
 # Laravel MailWeb
 
-Publish safe, semantic [MailWeb Protocol 0.5](../../docs/protocol.md) documents from an ordinary Laravel application. The package handles protocol envelopes, validation, request correlation, routing, serialization, reusable stationery, content-addressed enclosures, inbound correspondence, and SMTP replies. Your application writes pages.
+Publish safe, semantic [MailWeb Protocol 0.6](../../docs/protocol.md) documents from an ordinary Laravel application. The package handles protocol envelopes, validation, request correlation, routing, serialization, reusable stationery, content-addressed enclosures, inbound correspondence, and SMTP replies. Your application writes pages.
 
 MailWeb is experimental art/software. It sends website-like interactions as private messages and should not be treated as production security infrastructure.
 
@@ -36,13 +36,13 @@ MAILWEB_MAILPIT_URL=http://localhost:8025
 php artisan mailweb:listen
 ```
 
-Your MailWeb client can now request the publisher. Carrier-to-domain discovery is intentionally outside Protocol 0.5, so configure the client destination separately.
+Your MailWeb client can now request the publisher. Carrier-to-domain discovery is intentionally outside Protocol 0.6, so configure the client destination separately.
 
 ## Configuration
 
 The published `config/mailweb.php` contains only the current integration boundaries:
 
-- `protocol` — current package protocol version (`0.5`).
+- `protocol` — current package protocol version (`0.6`).
 - `routes` — route declaration file, normally `routes/mailweb.php`.
 - `http_endpoint` — optional direct/local carrier endpoint, default `/mailweb/messages`.
 - `publisher_address` — sender and inbound publisher mailbox.
@@ -115,7 +115,7 @@ The client owns the input controls. A GET form URI-encodes fields into its actio
 
 ## Document builder
 
-`MailWeb::page($title, $status = 200)` supports every Protocol 0.5 node:
+`MailWeb::page($title, $status = 200)` supports every Protocol 0.6 node:
 
 ```php
 MailWeb::page('A letter', status: 200)
@@ -161,6 +161,23 @@ Filename, actual media type, byte size, SHA-256 digest, base64 JSON representati
 
 `add(array $node)` is available for low-level protocol work. Prefer the typed helpers in application code.
 
+Client-owned capabilities use a generic action node:
+
+```php
+return MailWeb::page('Identity requested')->clientAction(
+    'Present credential',
+    'technical-passport.present',
+    '/authenticate',
+    ['service' => 'example.local', 'challenge' => $challenge],
+    ['public_identity'],
+);
+```
+
+The parameters are public application data. A supporting client must obtain
+explicit user consent, perform its local operation in visibly client-owned UI,
+and POST only the capability result to the action. Unsupported clients display
+the request but do not execute it. Secrets are never client-action parameters.
+
 ## Local HTTP carrier
 
 The package registers `POST /mailweb/messages` by default. This accepts exactly the same MailWeb JSON envelope and is useful for direct local clients and tests. Set `http_endpoint` to `null` to disable it. HTTP is a carrier here; its concepts do not enter the MailWeb envelope.
@@ -174,7 +191,7 @@ Use `php artisan mailweb:listen --once` to process currently available messages 
 ## Security and limitations
 
 - Publisher content is semantic data, never arbitrary HTML or JavaScript.
-- Protocol 0.5 does not provide encryption, authentication, access control, replay protection, sessions, or production mailbox discovery.
+- Protocol 0.6 does not provide encryption, authentication, access control, replay protection, sessions, or production mailbox discovery.
 - The Mailpit inbox driver is for local experimentation. Bind a suitable `Inbox` implementation before using another receiving system.
 - Validate and constrain all user input as you would in any Laravel application.
 - A transport is responsible for whatever confidentiality and identity guarantees it claims to provide.

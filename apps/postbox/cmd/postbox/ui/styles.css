@@ -5,6 +5,20 @@
     background: #dce3dc;
 }
 
+.trusted-ui {
+	border: 3px solid #1a8f78;
+	box-shadow: 0 0 0 6px rgba(26, 143, 120, .18), 0 24px 70px rgba(0, 0, 0, .35);
+}
+.trusted-ui .eyebrow { color: #126c5b; font-weight: 900; letter-spacing: .12em; }
+.trusted-ui-note { padding: 12px 14px; border-left: 4px solid #1a8f78; color: #24483f; background: #e6f4ef; font-size: .9rem; line-height: 1.5; }
+.trusted-ui-error { margin: 0 0 12px; padding: 10px 12px; border: 1px solid #b64949; border-radius: 7px; color: #7b1d1d; background: #f8dddd; font-weight: 700; }
+.trusted-ui-actions { position: sticky; z-index: 2; bottom: -30px; display: grid; grid-template-columns: minmax(240px, 1fr) auto; align-items: center; gap: 16px; margin: 18px -30px -30px; padding: 18px 30px; border-top: 1px solid #bfd4cc; background: #f5fbf8; box-shadow: 0 -8px 22px #20382d14; }
+.trusted-ui-actions .document-button { width: 100%; min-width: 0; border-color: #126c5b; color: #fff; background: #126c5b; font-weight: 850; text-decoration: none; }
+.trusted-ui-actions .document-button:hover { color: #fff; background: #0d5749; }
+.trusted-ui-actions button:last-child { position: static; padding: 11px 16px; border: 1px solid transparent; color: #40534a; background: transparent; text-decoration: underline; }
+@media (max-width: 600px) { .trusted-ui-actions { grid-template-columns: 1fr; } .trusted-ui-actions button:last-child { justify-self: center; } }
+.trusted-request { border-left: 5px solid var(--document-accent, #1a8f78); }
+
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; min-width: 340px; min-height: 100vh; background: radial-gradient(circle at top, #f4f0df 0, #dce3dc 52%, #c9d3cc 100%); }
@@ -39,6 +53,16 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .explain-button:hover { color: #17251c; background: #f2c14e; }
 .chrome-explainer { width: 30px; height: 30px; }
 .controls { display: flex; gap: 8px; align-items: center; }
+.site-tabs { display: flex; gap: 5px; align-items: end; min-height: 39px; margin: 12px -18px -12px; padding: 0 18px; overflow-x: auto; border-bottom: 1px solid #0c140f; background: #101b14; scrollbar-width: thin; }
+.site-tab { display: flex; flex: 0 0 auto; align-items: stretch; min-width: 150px; max-width: 250px; height: 34px; margin-top: 5px; overflow: hidden; border: 1px solid #ffffff20; border-bottom: 0; border-radius: 9px 9px 0 0; color: #b9c6bc; background: #253329; }
+.site-tab:hover { color: #f5f3e8; background: #304036; }
+.site-tab.current { position: relative; color: #18211b; background: #f8f8f3; border-color: #f8f8f3; }
+.site-tab.current::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 3px; background: #f2c14e; }
+.site-tab-select { display: flex; flex: 1; min-width: 0; align-items: center; gap: 8px; padding: 0 8px 2px 10px; overflow: hidden; border: 0; color: inherit; background: transparent; font-size: .76rem; text-align: left; }
+.site-tab-select span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-tab-icon { display: grid; flex: 0 0 auto; width: 20px; height: 20px; place-items: center; border-radius: 5px; color: #17251c; background: #f2c14e; font-size: .65rem; font-weight: 900; }
+.site-tab-close { width: 29px; padding: 0 5px 2px 0; border: 0; color: inherit; background: transparent; font-size: 1rem; opacity: .65; }
+.site-tab-close:hover { color: #9c2727; opacity: 1; }
 .icon-button, .go-button { min-height: 42px; border: 1px solid #ffffff26; border-radius: 10px; color: inherit; background: #ffffff12; }
 .icon-button { width: 44px; font-size: 1.25rem; }
 .icon-button:hover:not(:disabled), .go-button:hover:not(:disabled) { background: #ffffff21; }
@@ -152,6 +176,7 @@ dialog::backdrop { background: #101a147a; backdrop-filter: blur(3px); }
 .postbox-item p { color: #69756d; font-size: .76rem; }
 .postbox-item button { justify-self: start; margin-top: 5px; border: 0; color: #315c45; background: transparent; font-weight: 800; text-decoration: underline; }
 .correspondence-view { width: min(980px, calc(100% - 30px)); max-height: calc(100% - 30px); padding: 30px; border-radius: 16px; }
+.trusted-ui { overflow-y: auto; }
 .truth-note { padding: 10px 12px; border-left: 3px solid #b2933b; color: #665a37; background: #fff6d8; }
 .email-card { margin: 24px 0; overflow: hidden; border: 1px solid #ced5cf; border-radius: 10px; background: #fff; }
 .email-folder { margin: 0; padding: 7px 16px; color: #e4ebe5; background: #26372c; font-size: .65rem; font-weight: 900; letter-spacing: .14em; }

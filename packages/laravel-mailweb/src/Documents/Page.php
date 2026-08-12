@@ -99,6 +99,20 @@ final class Page implements JsonSerializable
         return $this->node(array_filter(['type' => 'image', 'src' => $src, 'alt' => $alt, 'variant' => $variant === 'normal' ? null : $variant]));
     }
 
+    /** @param array<string, string> $parameters @param array<int, string> $discloses */
+    public function clientAction(string $label, string $capability, string $action, array $parameters, array $discloses = []): self
+    {
+        if ($label === '' || ! preg_match('/^[a-z][a-z0-9.-]{0,63}$/', $capability) || $action === '') {
+            throw new InvalidArgumentException('Client actions require a label, capability, and action.');
+        }
+        foreach ($parameters as $name => $value) {
+            if (! is_string($name) || ! preg_match('/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/', $name) || ! is_string($value)) {
+                throw new InvalidArgumentException('Client action parameters must be named strings.');
+            }
+        }
+        return $this->node(['type' => 'client_action', 'label' => $label, 'capability' => $capability, 'action' => $action, 'parameters' => $parameters, 'discloses' => array_values($discloses)]);
+    }
+
 	public function attachment(Enclosure $enclosure, string $label, string $description = ''): self
 	{
 		$this->enclosures[$enclosure->digest] = $enclosure;

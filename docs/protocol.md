@@ -1,8 +1,8 @@
-# MailWeb Protocol v0.5
+# MailWeb Protocol v0.6
 
 ## Status
 
-This document defines the experimental MailWeb Protocol v0.5. The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** carry their usual RFC meanings.
+This document defines the experimental MailWeb Protocol v0.6. The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** carry their usual RFC meanings.
 
 ## 1. Scope and transport independence
 
@@ -12,7 +12,7 @@ Messages are UTF-8 JSON objects. The canonical [request](../packages/protocol/sc
 
 ## 2. Requests
 
-Every request contains `mailweb: "0.5"`, a fresh uppercase ULID `id`, `method`, an absolute `mailweb://` URI, and string-valued `headers`.
+Every request contains `mailweb: "0.6"`, a fresh uppercase ULID `id`, `method`, an absolute `mailweb://` URI, and string-valued `headers`.
 
 ### 2.1 GET and query parameters
 
@@ -20,7 +20,7 @@ GET retrieves a document and MUST NOT contain `body`. Query parameters belong in
 
 ```json
 {
-  "mailweb": "0.5",
+  "mailweb": "0.6",
   "id": "01J00000000000000000000000",
   "method": "GET",
   "uri": "mailweb://demo.local/search?q=internet",
@@ -36,7 +36,7 @@ POST submits application data. In v0.4, `body` is a JSON object and is REQUIRED 
 
 ```json
 {
-  "mailweb": "0.5",
+  "mailweb": "0.6",
   "id": "01J00000000000000000000000",
   "method": "POST",
   "uri": "mailweb://demo.local/hello",
@@ -49,7 +49,7 @@ Headers are MailWeb application metadata, not SMTP or HTTP headers. A client MAY
 
 ## 3. Responses and correlation
 
-A response contains `mailweb: "0.5"`, `request_id`, an integer `status` from 100 through 599, and a `document`. `request_id` MUST exactly match the request `id`. Status describes the MailWeb result, not carrier delivery. A document is required even for errors.
+A response contains `mailweb: "0.6"`, `request_id`, an integer `status` from 100 through 599, and a `document`. `request_id` MUST exactly match the request `id`. Status describes the MailWeb result, not carrier delivery. A document is required even for errors.
 
 ## 4. Documents
 
@@ -65,10 +65,37 @@ v0.4 supports:
 - `form`: semantic input and submission metadata described below.
 - `nav`: an accessible label and ordered `{label, href}` items. Items navigate through MailWeb like links, and renderers SHOULD identify the current destination.
 - `slot`: a template-only named insertion point. It is invalid in ordinary composed documents and response slot content.
+- `client_action`: an explicit request for a named native client capability, described below.
 
 References resolve against the request URI. Clients MUST reject executable schemes and MAY restrict external resources.
 
-### 4.1 Form node
+### 4.1 Client action node
+
+Protocol 0.6 adds one generic bridge from correspondence to explicitly
+client-owned behaviour:
+
+```json
+{
+  "type": "client_action",
+  "label": "Present credential",
+  "capability": "technical-passport.present",
+  "action": "/authenticate",
+  "parameters": {"service": "example.local", "challenge": "public-value"},
+  "discloses": ["public_identity"]
+}
+```
+
+`parameters` are public inputs supplied by the correspondent. `discloses`
+describes the public result the client may return. A client MUST require an
+explicit holder action, MUST distinguish its own trusted UI from document
+content, and MUST NOT place locally collected secrets in the resulting MailWeb
+request. If approved, the client POSTs the public capability result to `action`
+through its selected MailWeb transport. Unsupported capabilities are inert.
+
+This node does not define a capability registry, secret-input mechanism, or
+extension runtime.
+
+### 4.2 Form node
 
 ```json
 {
@@ -130,9 +157,9 @@ Template Presentation Intent supplies defaults; response properties override tho
 
 ### 4.4 Enclosures
 
-Protocol 0.5 responses MAY declare up to 16 transport-independent `enclosures`. Each has a unique request-local `id`, sanitized basename `filename`, allowed `media_type`, byte `size`, and lowercase SHA-256 `digest`. JSON carriers represent optional bytes as base64 `content`. The logical model never mentions MIME parts or carrier URLs.
+Protocol 0.6 responses MAY declare up to 16 transport-independent `enclosures`. Each has a unique request-local `id`, sanitized basename `filename`, allowed `media_type`, byte `size`, and lowercase SHA-256 `digest`. JSON carriers represent optional bytes as base64 `content`. The logical model never mentions MIME parts or carrier URLs.
 
-An `image` may reference an enclosure by exact `enclosure` ID and `digest`. An `attachment` node adds a plain label and optional description for an explicitly opened or downloaded file. Supported inline images are PNG, JPEG, and WebP; SVG, HTML, scripts, stylesheets, audio, video, and executables are excluded. Downloadable v0.5 enclosures are additionally limited to PDF and plain text.
+An `image` may reference an enclosure by exact `enclosure` ID and `digest`. An `attachment` node adds a plain label and optional description for an explicitly opened or downloaded file. Supported inline images are PNG, JPEG, and WebP; SVG, HTML, scripts, stylesheets, audio, video, and executables are excluded. Downloadable v0.6 enclosures are additionally limited to PDF and plain text.
 
 Clients validate decoded byte length and digest before filing or exposing content. This implementation permits 16 enclosures, 2 MiB per enclosure, 5 MiB declared total, and 64 session-cached digests. Duplicate IDs, unsafe filenames, unsupported media, malformed base64/MIME, oversized data, and digest mismatches fail safely. Missing referenced bytes produce `MISSING ENCLOSURE`; no remote fallback occurs.
 

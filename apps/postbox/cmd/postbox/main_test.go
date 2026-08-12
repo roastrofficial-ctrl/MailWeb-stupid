@@ -392,7 +392,7 @@ func TestStationeryFirstDeliveryCompositionAndReuse(t *testing.T) {
 func TestStationeryValidationAndMissingBehavior(t *testing.T) {
 	template := testStationery()
 	request, _ := NewRequest("mailweb://demo.local/")
-	response := MailWebResponse{MailWeb: "0.5", RequestID: request.ID, Status: 200, Document: &MailWebDocument{Title: "Page", Body: []Node{}, Template: template.ID, TemplateVersion: template.Version, Slots: map[string][]Node{"unknown": {{Type: "paragraph", Text: "lost"}}}}, Templates: []TemplateDefinition{template}}
+	response := MailWebResponse{MailWeb: "0.6", RequestID: request.ID, Status: 200, Document: &MailWebDocument{Title: "Page", Body: []Node{}, Template: template.ID, TemplateVersion: template.Version, Slots: map[string][]Node{"unknown": {{Type: "paragraph", Text: "lost"}}}}, Templates: []TemplateDefinition{template}}
 	if err := ValidateResponse(request, response); err != nil {
 		t.Fatal(err)
 	}
@@ -461,7 +461,7 @@ func enclosureFixture() Enclosure {
 func TestEnclosureValidationStorageAndReuse(t *testing.T) {
 	request, _ := NewRequest("mailweb://demo.local/")
 	enclosure := enclosureFixture()
-	response := MailWebResponse{MailWeb: "0.5", RequestID: request.ID, Status: 200, Enclosures: []Enclosure{enclosure}, Document: &MailWebDocument{Title: "File", Body: []Node{{Type: "attachment", Enclosure: enclosure.ID, Digest: enclosure.Digest, Label: "Download"}}}}
+	response := MailWebResponse{MailWeb: "0.6", RequestID: request.ID, Status: 200, Enclosures: []Enclosure{enclosure}, Document: &MailWebDocument{Title: "File", Body: []Node{{Type: "attachment", Enclosure: enclosure.ID, Digest: enclosure.Digest, Label: "Download"}}}}
 	if err := ValidateResponse(request, response); err != nil {
 		t.Fatal(err)
 	}
@@ -508,7 +508,7 @@ func TestEnclosureValidationStorageAndReuse(t *testing.T) {
 
 func TestMultipartMIMEEnclosureDecoding(t *testing.T) {
 	enclosure := enclosureFixture()
-	response := MailWebResponse{MailWeb: "0.5", RequestID: "01J00000000000000000000000", Status: 200, Enclosures: []Enclosure{{ID: enclosure.ID, Filename: enclosure.Filename, MediaType: enclosure.MediaType, Size: enclosure.Size, Digest: enclosure.Digest}}, Document: &MailWebDocument{Title: "MIME", Body: []Node{}}}
+	response := MailWebResponse{MailWeb: "0.6", RequestID: "01J00000000000000000000000", Status: 200, Enclosures: []Enclosure{{ID: enclosure.ID, Filename: enclosure.Filename, MediaType: enclosure.MediaType, Size: enclosure.Size, Digest: enclosure.Digest}}, Document: &MailWebDocument{Title: "MIME", Body: []Node{}}}
 	payload, _ := json.Marshal(response)
 	raw := "From: browse@demo.local\r\nTo: postbox@client.local\r\nSubject: response\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=letter\r\n\r\n--letter\r\nContent-Type: application/mailweb+json\r\n\r\n" + string(payload) + "\r\n--letter\r\nContent-Type: text/plain\r\nContent-ID: <manifesto>\r\nContent-Transfer-Encoding: base64\r\n\r\nZW5jbG9zZWQgY29ycmVzcG9uZGVuY2U=\r\n--letter--\r\n"
 	decoded, err := parseMailWebResponse([]byte(raw))

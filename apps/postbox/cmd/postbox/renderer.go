@@ -48,6 +48,8 @@ func RenderTerminal(writer io.Writer, response MailWebResponse) []Navigation {
 		case "attachment":
 			file := enclosures[node.Digest]
 			fmt.Fprintf(writer, "[Attachment: %s · %s · %d bytes]\n\n", file.Filename, file.MediaType, file.Size)
+		case "client_action":
+			fmt.Fprintf(writer, "[%s — open graphical Postbox security UI]\n\n", node.Label)
 		}
 	}
 	return navigation

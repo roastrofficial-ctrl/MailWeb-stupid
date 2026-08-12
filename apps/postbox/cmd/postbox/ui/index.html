@@ -12,6 +12,7 @@
             <div class="topline">
                 <div class="brand"><span class="brand-mark">M</span><span>Postbox</span></div>
 				<div class="reader-tools">
+					<button id="passport-open" class="postbox-button" type="button">Local Services</button>
 					<details class="appearance-menu">
 						<summary>Appearance</summary>
 						<fieldset id="appearance-options">
@@ -42,6 +43,7 @@
                 </form>
 				<button class="explain-button chrome-explainer" type="button" popovertarget="address-explainer" title="How MailWeb addresses work" aria-label="How MailWeb addresses work">?</button>
             </nav>
+			<nav id="site-tabs" class="site-tabs" aria-label="Open MailWeb sites"></nav>
             <div id="loading" class="loading" hidden><span></span> Private request sent — waiting for <s>URL</s> new correspondence…</div>
 			<div class="premail-row">
 				<div id="premail-status" class="premail-status" aria-live="polite">prEmail: checking the address book…</div>
@@ -137,6 +139,22 @@
 		<p class="truth-note">This friendly prose is derived from the actual MailWeb request and response. It is not a byte-for-byte rendering of the MIME messages.</p>
 		<div id="email-request"></div>
 		<div id="email-response"></div>
+	</dialog>
+	<dialog id="passport-view" class="correspondence-view trusted-ui">
+		<header><div><p class="eyebrow">LOCAL CAPABILITY PROVIDERS · HOST INTEGRATION</p><h2>Local Services</h2></div><button class="dialog-close" type="button" data-close="passport-view" aria-label="Close">×</button></header>
+		<div id="passport-status"></div>
+		<p>Postbox can delegate <code>identity.*</code> requests to this configured provider. Provider storage and credential internals are not accessible to Postbox.</p>
+		<button id="passport-remove" type="button">Reset provider-held identity</button>
+	</dialog>
+	<dialog id="client-action-view" class="correspondence-view trusted-ui">
+		<header><div><p class="eyebrow">TECHNICAL PASSPORT SERVICE UI · HOSTED BY POSTBOX</p><h2 id="client-action-title">Local capability</h2></div><button class="dialog-close" type="button" data-close="client-action-view" aria-label="Close">×</button></header>
+		<p id="client-action-service"></p><p id="client-action-description"></p><p id="client-action-disclosure" class="trusted-ui-note"></p>
+		<form id="client-action-form">
+			<label class="form-field"><span id="client-action-pin-label">Passport PIN</span><input id="client-action-pin-input" name="pin" type="password" required autocomplete="current-password"></label>
+			<label id="client-action-confirm-group" class="form-field"><span>Confirm your new PIN</span><input name="pin_confirmation" type="password" minlength="8" autocomplete="new-password"></label>
+			<p id="client-action-form-error" class="trusted-ui-error" role="alert" hidden></p>
+			<div class="trusted-ui-actions"><button id="client-action-submit" class="document-button prominent" type="submit">Continue</button><button id="client-action-refuse" type="button">Cancel</button></div>
+		</form>
 	</dialog>
     <script src="/app.js" defer></script>
 </body>

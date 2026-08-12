@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -180,6 +181,25 @@ func (session *BrowserSession) SubmitForm(ctx context.Context, method, action st
 	return session.navigate(ctx, "POST", uri, body, true, historyPush, true)
 }
 
+func (session *BrowserSession) SubmitClientAction(ctx context.Context, action string, body map[string]any) (BrowserState, error) {
+	session.mu.Lock()
+	if session.index < 0 { state := session.stateLocked(); session.mu.Unlock(); return state, errors.New("cannot perform a client action without a current document") }
+	base := session.history[session.index].URI
+	session.mu.Unlock()
+	uri, err := resolveMailWebReference(base, action); if err != nil { return session.Snapshot(), err }
+	return session.navigate(ctx, "POST", uri, body, true, historyPush, true)
+}
+
+func (session *BrowserSession) AuthorizeClientAction(capability, action string, parameters map[string]string) error {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if session.index < 0 { return errors.New("no current document") }
+	for _, node := range session.history[session.index].Response.Document.Body {
+		if node.Type == "client_action" && node.Capability == capability && node.Action == action && reflect.DeepEqual(node.Parameters, parameters) { return nil }
+	}
+	return errors.New("client action was not requested by the current MailWeb document")
+}
+
 func (session *BrowserSession) Back(ctx context.Context) (BrowserState, error) {
 	return session.move(ctx, -1)
 }
@@ -245,6 +265,11 @@ func (session *BrowserSession) navigate(ctx context.Context, method, uri string,
 	journey.add("cache.checked", "Postbox checked for existing correspondence", map[string]string{"bypass": jsonBool(bypass)})
 	if method == "POST" {
 		journey.add("form.collected", "form enclosed for private delivery", map[string]string{"fields": jsonNumber(len(body)), "values": "redacted"})
+		if _, ok := body["passport_proof"]; ok {
+			journey.add("capability.delegated", "identity capability delegated to configured local provider", map[string]string{"provider":"Technical Passport Service", "transport":"HOST INTEGRATION"})
+			journey.add("capability.result", "safe capability result received from local provider", map[string]string{"secret":"not received by Postbox"})
+			journey.add("capability.returned", "portable identity proof enclosed through MailWeb", nil)
+		}
 	}
 	var result NavigationResult
 	if method == "GET" && !bypass {
@@ -389,11 +414,15 @@ func (session *BrowserSession) exchange(ctx context.Context, method, uri string,
 			}
 		}
 	}
+	publisherMailbox := session.publisherMailbox
+	if correspondent, ok := session.transport.(interface{ CorrespondentFor(string) string }); ok {
+		publisherMailbox = correspondent.CorrespondentFor(uri)
+	}
 	return NavigationResult{
 		URI: uri, Request: request, Response: response, RawResponse: &rawResponse, StationeryStatus: stationeryStatus, EnclosuresReceived: receivedEnclosures, EnclosuresReused: reusedEnclosures, EnclosureBytes: enclosureBytes, Transport: session.transportName, Delivery: "live",
 		RequestSentAt: sent, ResponseReceivedAt: received, RoundTripMS: received.Sub(sent).Milliseconds(),
 		OpenedAt: received, NavigationMS: received.Sub(sent).Milliseconds(), ClientMailbox: session.clientMailbox,
-		PublisherMailbox: session.publisherMailbox,
+		PublisherMailbox: publisherMailbox,
 	}, nil
 }
 

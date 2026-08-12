@@ -1,9 +1,12 @@
 "use strict";
 
-const elements = Object.fromEntries(["address", "address-form", "back", "forward", "reload", "loading", "error", "viewport", "correspondence-stage", "travelling-envelope", "correspondence-status", "route-host", "route-mailbox", "postbox-open", "postbox-drawer", "postbox-items", "postbox-count", "stationery-items", "enclosure-items", "correspondence-view-open", "correspondence-view", "email-request", "email-response", "journey-view-open", "journey-view", "journey-history", "journey-summary", "journey-events", "journey-instant"].map((id) => [id, document.getElementById(id)]));
+const elements = Object.fromEntries(["address", "address-form", "back", "forward", "reload", "loading", "error", "viewport", "correspondence-stage", "travelling-envelope", "correspondence-status", "route-host", "route-mailbox", "postbox-open", "postbox-drawer", "postbox-items", "postbox-count", "stationery-items", "enclosure-items", "correspondence-view-open", "correspondence-view", "email-request", "email-response", "journey-view-open", "journey-view", "journey-history", "journey-summary", "journey-events", "journey-instant", "passport-open", "passport-view", "passport-status", "passport-remove", "client-action-view", "client-action-title", "client-action-service", "client-action-description", "client-action-disclosure", "client-action-form", "client-action-pin-label", "client-action-pin-input", "client-action-confirm-group", "client-action-form-error", "client-action-submit", "client-action-refuse", "site-tabs"].map((id) => [id, document.getElementById(id)]));
+const capabilityProvider = "http://127.0.0.1:8792";
 let currentState = null;
 let appearanceMode = "correspondent";
 let knownArchive = new Set();
+let pendingClientAction = null;
+let siteTabs = [];
 
 class CorrespondenceAnimation {
     constructor(stage) { this.stage = stage; this.timer = null; this.reduced = matchMedia("(prefers-reduced-motion: reduce)").matches; }
@@ -125,6 +128,21 @@ elements.back.addEventListener("click", () => void action("/api/back", "live"));
 elements.forward.addEventListener("click", () => void action("/api/forward", "live"));
 elements.reload.addEventListener("click", () => void action("/api/reload", "live"));
 elements["postbox-open"].addEventListener("click", () => elements["postbox-drawer"].showModal());
+elements["passport-open"].addEventListener("click", async () => { await refreshPassport(); elements["passport-view"].showModal(); });
+elements["passport-remove"].addEventListener("click", async () => { await fetch(`${capabilityProvider}/passport`, {method:"DELETE"}); await refreshPassport(); });
+elements["client-action-refuse"].addEventListener("click", () => { pendingClientAction = null; elements["client-action-view"].close(); });
+elements["client-action-form"].addEventListener("submit", async (event) => {
+    event.preventDefault(); if (!pendingClientAction) return;
+    const data = new FormData(event.currentTarget), pin = String(data.get("pin") || ""), confirmation = String(data.get("pin_confirmation") || "");
+    if (pendingClientAction.interaction.confirm && pin !== confirmation) { elements["client-action-form-error"].textContent = "Those PINs do not match. Please enter them again."; elements["client-action-form-error"].hidden = false; return; }
+    const latest = await fetch("/api/state", {headers:{"Accept":"application/json"}}).then(response => response.json()).catch(() => null);
+    if (!latest?.state?.current || latest.state.current.request.id !== pendingClientAction.sourceRequestID) { elements["client-action-form-error"].textContent = "This security request belongs to an older MailWeb document. Close this panel, submit the Passport Office application again, then choose your PIN on the new request."; elements["client-action-form-error"].hidden = false; return; }
+    const target = resolveReference(pendingClientAction.action);
+    elements["client-action-form-error"].hidden = true; elements["client-action-submit"].disabled = true; animation.start("live", target); setLoading(true);
+    try { const providerResponse = await fetch(`${capabilityProvider}/invoke`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({capability:pendingClientAction.capability, parameters:pendingClientAction.parameters, secret:pin})}), providerResult = await providerResponse.json(); if(!providerResponse.ok || !providerResult.ok) throw new Error(providerResult.error || "Identity service unavailable"); const payload={capability:pendingClientAction.capability, action:pendingClientAction.action, parameters:pendingClientAction.parameters, result:providerResult.result}; const response = await fetch("/api/client-action", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)}), result = await response.json(); if (!response.ok) { const stale = result.error === "client action was not requested by the current MailWeb document"; elements["client-action-form-error"].textContent = stale ? "This Passport Office request is no longer current. Close this panel and submit the application again." : (result.error || "Postbox could not return the capability result."); elements["client-action-form-error"].hidden = false; animation.fail("Capability not completed."); return; } event.currentTarget.reset(); elements["client-action-view"].close(); pendingClientAction = null; await animation.finish(result.state.current); updateState(result.state); }
+    catch (error) { elements["client-action-form-error"].textContent = error instanceof TypeError ? "Technical Passport Service is unavailable. Anonymous MailWeb remains available." : error.message; elements["client-action-form-error"].hidden = false; animation.fail("Local capability unavailable."); }
+    finally { elements["client-action-submit"].disabled = false; setLoading(false); }
+});
 elements["journey-view-open"].addEventListener("click", () => { if (currentState?.last_journey) { journeyInspector.render(currentState); elements["journey-view"].showModal(); } });
 elements["journey-instant"].addEventListener("click", () => journeyInspector.render(currentState, journeyInspector.selected, true));
 elements["correspondence-view-open"].addEventListener("click", () => { if (currentState?.current) { correspondence.render(currentState.current); elements["correspondence-view"].showModal(); } });
@@ -133,6 +151,8 @@ for (const input of document.querySelectorAll('input[name="appearance"]')) input
 
 async function navigate(payload) {
     let target = payload.uri || resolveReference(payload.reference);
+	const destination = safeURL(target, currentState?.current?.uri), origin = safeURL(currentState?.current?.uri);
+	if (destination && origin && destination.host !== origin.host && !siteTabs.some(tab => tab.host === destination.host)) siteTabs.push({host:destination.host, uri:destination.href});
     await requestState("/api/navigate", payload, target && knownArchive.has(target) ? "archived" : "live", target);
 }
 async function action(endpoint, kind) { await requestState(endpoint, {}, kind, currentState?.current?.uri); }
@@ -162,10 +182,13 @@ function updateState(state, backgroundOnly = false) {
     if (backgroundOnly) return;
     elements.back.disabled = !state.can_go_back; elements.forward.disabled = !state.can_go_forward; elements.reload.disabled = !state.current;
     if (!state.current) return;
+	const host=safeURL(state.current.uri)?.host; if(host && !siteTabs.some(tab=>tab.host===host)) siteTabs.push({host,uri:state.current.uri}); else { const tab=siteTabs.find(tab=>tab.host===host); if(tab) tab.uri=state.current.uri; } renderTabs(host);
     elements.address.value = state.current.uri; presentation.apply(state.current.response.document || {}, appearanceMode); renderDocument(state.current); renderDebug(state.current);
     elements["correspondence-view-open"].disabled = false;
 	elements["journey-view-open"].disabled = !state.last_journey;
 }
+
+function renderTabs(activeHost) { elements["site-tabs"].replaceChildren(); for(const tab of siteTabs){ const button=document.createElement("button"), close=document.createElement("button"), icon=document.createElement("span"), label=document.createElement("span"); button.type="button"; button.className="site-tab-select"; icon.className="site-tab-icon"; icon.textContent=tab.host.slice(0,1).toUpperCase(); label.textContent=tab.host; button.append(icon,label); if(tab.host===activeHost) { button.classList.add("current"); button.setAttribute("aria-current","page"); } button.addEventListener("click",()=>void navigate({uri:tab.uri})); close.type="button"; close.className="site-tab-close"; close.textContent="×"; close.setAttribute("aria-label",`Close ${tab.host}`); close.addEventListener("click",()=>{siteTabs=siteTabs.filter(item=>item!==tab); renderTabs(activeHost);}); const span=document.createElement("span"); span.className="site-tab"; if(tab.host===activeHost) span.classList.add("current"); span.append(button,close); elements["site-tabs"].appendChild(span); } }
 
 function renderPremailLetters(targets) {
 	const area = document.getElementById("premail-letters"); area.replaceChildren();
@@ -193,9 +216,21 @@ function renderNode(node, currentURI) {
     case "attachment": { const card = document.createElement("section"), title = document.createElement("strong"), copy = document.createElement("p"), download = document.createElement("a"), file = (currentState?.enclosures || []).find((item) => item.digest === node.digest); card.className = "attachment-card"; title.textContent = node.label; copy.textContent = node.description || (file ? `${file.media_type} · ${formatBytes(file.size)}` : "Enclosed file"); download.href = enclosureURL(node.digest); download.download = file?.filename || node.enclosure; download.textContent = "Open enclosed file"; card.append(title, copy, download); return card; }
     case "nav": { const nav = document.createElement("nav"), label = document.createElement("span"), list = document.createElement("ul"); nav.className = "mailweb-nav"; nav.setAttribute("aria-label", node.label); label.className = "visually-hidden"; label.textContent = node.label; for (const item of node.items) { const li = document.createElement("li"), control = document.createElement("button"), destination = resolveReference(item.href); control.type = "button"; control.textContent = item.label; if (destination === currentURI) { control.className = "current"; control.setAttribute("aria-current", "page"); } control.addEventListener("click", () => void navigate({reference: item.href})); li.appendChild(control); list.appendChild(li); } nav.append(label, list); return nav; }
     case "form": { const form = document.createElement("form"); form.className = "mailweb-form"; for (const field of node.fields) { const group = document.createElement("label"); group.className = "form-field"; const label = document.createElement("span"); label.textContent = field.label; const input = document.createElement("input"); input.type = "text"; input.name = field.name; input.placeholder = field.placeholder || ""; input.required = Boolean(field.required); input.autocomplete = "off"; group.append(label, input); form.appendChild(group); } const submit = document.createElement("button"); submit.type = "submit"; submit.className = "document-button"; submit.textContent = node.submit; form.appendChild(submit); form.addEventListener("submit", (event) => { event.preventDefault(); const values = Object.create(null), data = new FormData(form); for (const field of node.fields) values[field.name] = String(data.get(field.name) || ""); void submitForm(node, values); }); return form; }
+    case "client_action": { const card = document.createElement("section"), label = document.createElement("p"), button = document.createElement("button"); card.className = "attachment-card trusted-request"; label.textContent = `This correspondent requests the local capability: ${node.capability}`; button.type = "button"; button.className = "document-button prominent"; button.textContent = node.label; button.addEventListener("click", () => void openCapability(node)); card.append(label, button); return card; }
     default: { const unsupported = document.createElement("p"); unsupported.textContent = "Unsupported document node."; return unsupported; }
     }
 }
+
+async function openCapability(node) {
+    try {
+        const response=await fetch(`${capabilityProvider}/interaction`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({capability:node.capability,parameters:node.parameters||{}})}), value=await response.json();
+        if(!response.ok||!value.ok) throw new Error(value.error||"Local capability unavailable");
+        const interaction=value.interaction; pendingClientAction={capability:node.capability,action:node.action,parameters:node.parameters||{},sourceRequestID:currentState?.current?.request?.id,interaction};
+        elements["client-action-form"].reset(); elements["client-action-form-error"].hidden=true; elements["client-action-title"].textContent=interaction.title; elements["client-action-service"].textContent="Provider: Technical Passport Service · HOST INTEGRATION"; elements["client-action-description"].textContent=interaction.description; elements["client-action-disclosure"].textContent=interaction.warning; elements["client-action-pin-label"].textContent=interaction.secret_label; elements["client-action-pin-input"].minLength=8; elements["client-action-pin-input"].autocomplete=interaction.confirm?"new-password":"current-password"; elements["client-action-confirm-group"].hidden=!interaction.confirm; elements["client-action-confirm-group"].querySelector("input").required=interaction.confirm; elements["client-action-submit"].textContent=interaction.submit; elements["client-action-refuse"].textContent="Refuse"; elements["client-action-view"].showModal();
+    } catch { showError("Technical Passport Service is unavailable. Anonymous MailWeb remains available."); }
+}
+async function refreshPassport() { try { const value=await (await fetch(`${capabilityProvider}/status`)).json(); renderPassport(value); return value; } catch { const value={available:false,unavailable:true}; renderPassport(value); return value; } }
+function renderPassport(value) { elements["passport-status"].replaceChildren(); const heading=document.createElement("strong"), paragraph=document.createElement("p"); heading.textContent="Technical Passport Service"; paragraph.textContent=value.unavailable?"UNAVAILABLE":value.available?"ONLINE · identity available":"ONLINE · no identity installed"; elements["passport-status"].append(heading,paragraph); elements["passport-remove"].hidden=!value.available; }
 
 function requestEmail(current) {
     const uri = new URL(current.request.uri), body = current.request.body || {};

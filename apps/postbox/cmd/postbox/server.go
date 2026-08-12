@@ -42,12 +42,24 @@ func RunWebUI(listenAddress string, session *BrowserSession) error {
 	mux.HandleFunc("POST /api/forward", server.forward)
 	mux.HandleFunc("POST /api/reload", server.reload)
 	mux.HandleFunc("GET /api/enclosures/{digest}", server.enclosure)
+	mux.HandleFunc("POST /api/client-action", server.clientAction)
 	mux.Handle("GET /", http.FileServerFS(assets))
 
 	handler := securityHeaders(mux)
 	log.Printf("Postbox UI listening on http://%s", listenAddress)
 	return http.ListenAndServe(listenAddress, handler)
 }
+
+func (server *uiServer) clientAction(writer http.ResponseWriter, request *http.Request) {
+	var input struct { Capability, Action string; Parameters map[string]string; Result map[string]any }
+	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 64<<10)); decoder.DisallowUnknownFields()
+	if decoder.Decode(&input) != nil || input.Capability == "" || input.Action == "" || input.Result == nil { writeJSON(writer, 400, map[string]string{"error":"invalid client capability result"}); return }
+	if err := server.session.AuthorizeClientAction(input.Capability, input.Action, input.Parameters); err != nil { writeJSON(writer, 403, map[string]string{"error":err.Error()}); return }
+	state, err := server.session.SubmitClientAction(request.Context(), input.Action, input.Result)
+	writeState(writer, state, err)
+}
+
+func writeJSON(writer http.ResponseWriter, status int, value any) { writer.Header().Set("Content-Type", "application/json"); writer.Header().Set("Cache-Control", "no-store"); writer.WriteHeader(status); _ = json.NewEncoder(writer).Encode(value) }
 
 func (server *uiServer) enclosure(writer http.ResponseWriter, request *http.Request) {
 	digest := "sha256:" + request.PathValue("digest")
@@ -137,7 +149,7 @@ func writeState(writer http.ResponseWriter, state BrowserState, err error) {
 
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' http: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+		writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' http: https:; connect-src 'self' http://127.0.0.1:8792 http://localhost:8792; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 		writer.Header().Set("Referrer-Policy", "no-referrer")
 		writer.Header().Set("X-Content-Type-Options", "nosniff")
 		writer.Header().Set("X-Frame-Options", "DENY")

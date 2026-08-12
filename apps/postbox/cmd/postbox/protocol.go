@@ -87,6 +87,9 @@ type Node struct {
 	Enclosure   string      `json:"enclosure,omitempty"`
 	Digest      string      `json:"digest,omitempty"`
 	Description string      `json:"description,omitempty"`
+	Capability  string            `json:"capability,omitempty"`
+	Parameters  map[string]string `json:"parameters,omitempty"`
+	Discloses   []string          `json:"discloses,omitempty"`
 }
 
 type NavItem struct {
@@ -113,7 +116,7 @@ func NewRequestWithBody(method, uri string, body map[string]any) (MailWebRequest
 	}
 	method = strings.ToUpper(method)
 	if method != "GET" && method != "POST" {
-		return MailWebRequest{}, errors.New("MailWeb 0.5 supports GET and POST only")
+		return MailWebRequest{}, errors.New("MailWeb 0.6 supports GET and POST only")
 	}
 	if method == "GET" && body != nil {
 		return MailWebRequest{}, errors.New("GET requests must not contain a body")
@@ -126,7 +129,7 @@ func NewRequestWithBody(method, uri string, body map[string]any) (MailWebRequest
 		}
 	}
 	return MailWebRequest{
-		MailWeb: "0.5",
+		MailWeb: "0.6",
 		ID:      newID(),
 		Method:  method,
 		URI:     parsed.String(),
@@ -136,7 +139,7 @@ func NewRequestWithBody(method, uri string, body map[string]any) (MailWebRequest
 }
 
 func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
-	if response.MailWeb != request.MailWeb || (response.MailWeb != "0.1" && response.MailWeb != "0.2" && response.MailWeb != "0.3" && response.MailWeb != "0.4" && response.MailWeb != "0.5") {
+	if response.MailWeb != request.MailWeb || (response.MailWeb != "0.1" && response.MailWeb != "0.2" && response.MailWeb != "0.3" && response.MailWeb != "0.4" && response.MailWeb != "0.5" && response.MailWeb != "0.6") {
 		return fmt.Errorf("unsupported MailWeb version %q", response.MailWeb)
 	}
 	if response.RequestID != request.ID {
@@ -160,11 +163,12 @@ func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
 		}
 	}
 	for index, node := range response.Document.Body {
+		if node.Type == "client_action" && response.MailWeb != "0.6" { return errors.New("client actions require MailWeb 0.6") }
 		if response.MailWeb == "0.1" && node.Type == "form" {
 			return fmt.Errorf("document body node %d: form requires MailWeb 0.2 or later", index)
 		}
 		if response.MailWeb != "0.3" && node.Variant != "" {
-			if response.MailWeb != "0.4" && response.MailWeb != "0.5" {
+			if response.MailWeb != "0.4" && response.MailWeb != "0.5" && response.MailWeb != "0.6" {
 				return fmt.Errorf("document body node %d: variants require MailWeb 0.3", index)
 			}
 		}
@@ -176,7 +180,7 @@ func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
 		}
 	}
 	if response.Document.Template != "" {
-		if (response.MailWeb != "0.4" && response.MailWeb != "0.5") || !templateIdentity.MatchString(response.Document.Template) || !validTemplateVersion(response.Document.TemplateVersion) || len(response.Document.Slots) > 64 || len(response.Document.Body) != 0 {
+		if (response.MailWeb != "0.4" && response.MailWeb != "0.5" && response.MailWeb != "0.6") || !templateIdentity.MatchString(response.Document.Template) || !validTemplateVersion(response.Document.TemplateVersion) || len(response.Document.Slots) > 64 || len(response.Document.Body) != 0 {
 			return errors.New("invalid template document reference")
 		}
 		for name, nodes := range response.Document.Slots {
@@ -192,11 +196,11 @@ func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
 				}
 			}
 		}
-	} else if (response.MailWeb == "0.4" || response.MailWeb == "0.5") && (response.Document.TemplateVersion != "" || len(response.Document.Slots) != 0) {
+	} else if (response.MailWeb == "0.4" || response.MailWeb == "0.5" || response.MailWeb == "0.6") && (response.Document.TemplateVersion != "" || len(response.Document.Slots) != 0) {
 		return errors.New("template fields require template")
 	}
 	for _, template := range response.Templates {
-		if (response.MailWeb != "0.4" && response.MailWeb != "0.5") || !templateIdentity.MatchString(template.ID) || !validTemplateVersion(template.Version) || template.Document.Template != "" {
+		if (response.MailWeb != "0.4" && response.MailWeb != "0.5" && response.MailWeb != "0.6") || !templateIdentity.MatchString(template.ID) || !validTemplateVersion(template.Version) || template.Document.Template != "" {
 			return errors.New("invalid template definition")
 		}
 		if err := validateTemplateDocument(template.Document); err != nil {
@@ -206,8 +210,8 @@ func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
 			return errors.New("template version does not match its content")
 		}
 	}
-	if response.MailWeb != "0.5" && len(response.Enclosures) != 0 {
-		return errors.New("enclosures require MailWeb 0.5")
+	if response.MailWeb != "0.5" && response.MailWeb != "0.6" && len(response.Enclosures) != 0 {
+		return errors.New("enclosures require MailWeb 0.5 or later")
 	}
 	byID := map[string]Enclosure{}
 	total := int64(0)
@@ -384,6 +388,11 @@ func validateNode(node Node) error {
 		if !formFieldName.MatchString(node.Name) || node.Level != 0 || node.Text != "" || node.Label != "" || node.Href != "" || node.Src != "" || len(node.Items) != 0 || hasFormMetadata(node) {
 			return errors.New("slot requires only a valid name")
 		}
+	case "client_action":
+		if node.Label == "" || !regexp.MustCompile(`^[a-z][a-z0-9.-]{0,63}$`).MatchString(node.Capability) || !safeMailWebReference(node.Action) || len(node.Parameters) > 32 || len(node.Discloses) > 32 {
+			return errors.New("client action requires a label, capability, safe action, and bounded public metadata")
+		}
+		for name := range node.Parameters { if !formFieldName.MatchString(name) { return errors.New("invalid client action parameter") } }
 	default:
 		return fmt.Errorf("unsupported type %q", node.Type)
 	}

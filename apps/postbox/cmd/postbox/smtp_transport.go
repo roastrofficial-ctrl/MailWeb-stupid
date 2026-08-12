@@ -28,6 +28,7 @@ type SMTPTransport struct {
 	Client        *http.Client
 	Status        io.Writer
 	ClientMailbox string
+	Publishers map[string]string
 }
 
 func NewSMTPTransport(smtpAddress, publisher, mailpitURL string, timeout time.Duration, status io.Writer) *SMTPTransport {
@@ -39,7 +40,7 @@ func NewSMTPTransport(smtpAddress, publisher, mailpitURL string, timeout time.Du
 		PollEvery:     500 * time.Millisecond,
 		Client:        &http.Client{Timeout: 3 * time.Second},
 		Status:        status,
-		ClientMailbox: "postbox-" + strings.ToLower(newID()) + "@client.local",
+		ClientMailbox: "postbox-" + strings.ToLower(newID()) + "@client.local", Publishers: publisherMap(),
 	}
 }
 
@@ -49,6 +50,16 @@ func (transport *SMTPTransport) Mailbox() string {
 
 func (transport *SMTPTransport) Correspondent() string { return transport.Publisher }
 
+func (transport *SMTPTransport) CorrespondentFor(rawURI string) string {
+	parsed, err := url.Parse(rawURI)
+	if err == nil {
+		if mapped := transport.Publishers[parsed.Host]; mapped != "" {
+			return mapped
+		}
+	}
+	return transport.Publisher
+}
+
 func (transport *SMTPTransport) Exchange(ctx context.Context, request MailWebRequest) (MailWebResponse, error) {
 	payload, err := json.Marshal(request)
 	if err != nil {
@@ -56,11 +67,12 @@ func (transport *SMTPTransport) Exchange(ctx context.Context, request MailWebReq
 	}
 	observeJourney(ctx, "request.serialized", "MailWebRequest serialized as application/mailweb+json", map[string]string{"bytes": jsonNumber(len(payload))})
 	mailbox := transport.ClientMailbox
-	message := buildMailMessage(mailbox, transport.Publisher, "MailWeb request "+request.ID, payload)
-	if err := smtp.SendMail(transport.SMTPAddress, nil, mailbox, []string{transport.Publisher}, message); err != nil {
+	destination := transport.CorrespondentFor(request.URI)
+	message := buildMailMessage(mailbox, destination, "MailWeb request "+request.ID, payload)
+	if err := smtp.SendMail(transport.SMTPAddress, nil, mailbox, []string{destination}, message); err != nil {
 		return MailWebResponse{}, fmt.Errorf("send request through SMTP: %w", err)
 	}
-	observeJourney(ctx, "transport.smtp.sent", "SMTP correspondence accepted for delivery", map[string]string{"from": mailbox, "to": transport.Publisher, "request_id": request.ID})
+	observeJourney(ctx, "transport.smtp.sent", "SMTP correspondence accepted for delivery", map[string]string{"from": mailbox, "to": destination, "request_id": request.ID})
 	if transport.Status != nil {
 		fmt.Fprintln(transport.Status, "Waiting for the publisher to reply...")
 	}
@@ -92,6 +104,8 @@ func (transport *SMTPTransport) Exchange(ctx context.Context, request MailWebReq
 		}
 	}
 }
+
+func publisherMap() map[string]string { result := map[string]string{}; for _, pair := range strings.Split(envOr("MAILWEB_PUBLISHER_MAP", ""), ",") { parts := strings.SplitN(pair, "=", 2); if len(parts) == 2 { result[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1]) } }; return result }
 
 type mailpitMessages struct {
 	Messages []struct {
