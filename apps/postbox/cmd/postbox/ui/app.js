@@ -1,7 +1,16 @@
 "use strict";
 
 const elements = Object.fromEntries(["address", "address-form", "back", "forward", "reload", "loading", "error", "viewport", "correspondence-stage", "travelling-envelope", "correspondence-status", "route-host", "route-mailbox", "postbox-open", "postbox-drawer", "postbox-items", "postbox-count", "stationery-items", "enclosure-items", "correspondence-view-open", "correspondence-view", "email-request", "email-response", "journey-view-open", "journey-view", "journey-history", "journey-summary", "journey-events", "journey-instant", "passport-open", "passport-view", "passport-status", "passport-remove", "client-action-view", "client-action-title", "client-action-service", "client-action-description", "client-action-disclosure", "client-action-form", "client-action-pin-label", "client-action-pin-input", "client-action-confirm-group", "client-action-form-error", "client-action-submit", "client-action-refuse", "site-tabs"].map((id) => [id, document.getElementById(id)]));
-const capabilityProvider = "http://127.0.0.1:8792";
+// Deployment configuration only: execution is resolved by declared capability.
+const capabilityProviders = [{endpoint: `http://${location.hostname}:8792`, declaration: null}];
+const capabilityProvider = capabilityProviders[0].endpoint;
+async function providerFor(capability) {
+    for (const provider of capabilityProviders) {
+        if (!provider.declaration) { const response=await fetch(`${provider.endpoint}/service-info`); if (!response.ok) continue; provider.declaration=await response.json(); }
+        if (provider.declaration.capabilities?.includes(capability)) return provider;
+    }
+    throw new Error(`No local provider offers ${capability}`);
+}
 let currentState = null;
 let appearanceMode = "correspondent";
 let knownArchive = new Set();
@@ -129,7 +138,7 @@ elements.forward.addEventListener("click", () => void action("/api/forward", "li
 elements.reload.addEventListener("click", () => void action("/api/reload", "live"));
 elements["postbox-open"].addEventListener("click", () => elements["postbox-drawer"].showModal());
 elements["passport-open"].addEventListener("click", async () => { await refreshPassport(); elements["passport-view"].showModal(); });
-elements["passport-remove"].addEventListener("click", async () => { await fetch(`${capabilityProvider}/passport`, {method:"DELETE"}); await refreshPassport(); });
+elements["passport-remove"].addEventListener("click", async () => { const provider=await providerFor("identity.remove"); await fetch(`${provider.endpoint}/identity`, {method:"DELETE"}); await refreshPassport(); });
 elements["client-action-refuse"].addEventListener("click", () => { pendingClientAction = null; elements["client-action-view"].close(); });
 elements["client-action-form"].addEventListener("submit", async (event) => {
     event.preventDefault(); if (!pendingClientAction) return;
@@ -140,7 +149,7 @@ elements["client-action-form"].addEventListener("submit", async (event) => {
     const target = resolveReference(pendingClientAction.action);
     elements["client-action-form-error"].hidden = true; elements["client-action-submit"].disabled = true; animation.start("live", target); setLoading(true);
     try { const providerResponse = await fetch(`${capabilityProvider}/invoke`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({capability:pendingClientAction.capability, parameters:pendingClientAction.parameters, secret:pin})}), providerResult = await providerResponse.json(); if(!providerResponse.ok || !providerResult.ok) throw new Error(providerResult.error || "Identity service unavailable"); const payload={capability:pendingClientAction.capability, action:pendingClientAction.action, parameters:pendingClientAction.parameters, result:providerResult.result}; const response = await fetch("/api/client-action", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)}), result = await response.json(); if (!response.ok) { const stale = result.error === "client action was not requested by the current MailWeb document"; elements["client-action-form-error"].textContent = stale ? "This Passport Office request is no longer current. Close this panel and submit the application again." : (result.error || "Postbox could not return the capability result."); elements["client-action-form-error"].hidden = false; animation.fail("Capability not completed."); return; } event.currentTarget.reset(); elements["client-action-view"].close(); pendingClientAction = null; await animation.finish(result.state.current); updateState(result.state); }
-    catch (error) { elements["client-action-form-error"].textContent = error instanceof TypeError ? "Technical Passport Service is unavailable. Anonymous MailWeb remains available." : error.message; elements["client-action-form-error"].hidden = false; animation.fail("Local capability unavailable."); }
+    catch (error) { elements["client-action-form-error"].textContent = error instanceof TypeError ? "The browser blocked the direct connection to Technical Passport Service. Open Postbox at http://localhost:9847 and try again." : error.message; elements["client-action-form-error"].hidden = false; animation.fail("Local capability unavailable."); }
     finally { elements["client-action-submit"].disabled = false; setLoading(false); }
 });
 elements["journey-view-open"].addEventListener("click", () => { if (currentState?.last_journey) { journeyInspector.render(currentState); elements["journey-view"].showModal(); } });
@@ -222,12 +231,11 @@ function renderNode(node, currentURI) {
 }
 
 async function openCapability(node) {
-    try {
-        const response=await fetch(`${capabilityProvider}/interaction`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({capability:node.capability,parameters:node.parameters||{}})}), value=await response.json();
-        if(!response.ok||!value.ok) throw new Error(value.error||"Local capability unavailable");
-        const interaction=value.interaction; pendingClientAction={capability:node.capability,action:node.action,parameters:node.parameters||{},sourceRequestID:currentState?.current?.request?.id,interaction};
-        elements["client-action-form"].reset(); elements["client-action-form-error"].hidden=true; elements["client-action-title"].textContent=interaction.title; elements["client-action-service"].textContent="Provider: Technical Passport Service · HOST INTEGRATION"; elements["client-action-description"].textContent=interaction.description; elements["client-action-disclosure"].textContent=interaction.warning; elements["client-action-pin-label"].textContent=interaction.secret_label; elements["client-action-pin-input"].minLength=8; elements["client-action-pin-input"].autocomplete=interaction.confirm?"new-password":"current-password"; elements["client-action-confirm-group"].hidden=!interaction.confirm; elements["client-action-confirm-group"].querySelector("input").required=interaction.confirm; elements["client-action-submit"].textContent=interaction.submit; elements["client-action-refuse"].textContent="Refuse"; elements["client-action-view"].showModal();
-    } catch { showError("Technical Passport Service is unavailable. Anonymous MailWeb remains available."); }
+    const requestID=crypto.randomUUID(), providerWindow=window.open(`${capabilityProvider}/ui`,"tps-trusted-ui","popup,width=620,height=720");
+    if(!providerWindow){showError("The browser blocked the Technical Passport trusted window. Allow pop-ups for Postbox and try again.");return}
+    const sourceRequestID=currentState?.current?.request?.id, parameters=node.parameters||{};
+    const receive=async event=>{if(event.source!==providerWindow||event.origin!==capabilityProvider)return;if(event.data?.type==='tps.ready'){providerWindow.postMessage({type:'tps.invoke',request_id:requestID,capability:node.capability,parameters},capabilityProvider);return}if(event.data?.type!=='tps.result'||event.data.request_id!==requestID)return;removeEventListener('message',receive);if(currentState?.current?.request?.id!==sourceRequestID){showError("The capability request is no longer current.");return}try{const payload={capability:node.capability,action:node.action,parameters,result:event.data.result},response=await fetch('/api/client-action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)}),value=await response.json();if(!response.ok)throw new Error(value.error||'Postbox could not return the capability result');updateState(value.state)}catch(error){showError(error.message)}};
+    addEventListener('message',receive);
 }
 async function refreshPassport() { try { const value=await (await fetch(`${capabilityProvider}/status`)).json(); renderPassport(value); return value; } catch { const value={available:false,unavailable:true}; renderPassport(value); return value; } }
 function renderPassport(value) { elements["passport-status"].replaceChildren(); const heading=document.createElement("strong"), paragraph=document.createElement("p"); heading.textContent="Technical Passport Service"; paragraph.textContent=value.unavailable?"UNAVAILABLE":value.available?"ONLINE · identity available":"ONLINE · no identity installed"; elements["passport-status"].append(heading,paragraph); elements["passport-remove"].hidden=!value.available; }
