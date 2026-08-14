@@ -113,6 +113,20 @@ final class Page implements JsonSerializable
         return $this->node(['type' => 'client_action', 'label' => $label, 'capability' => $capability, 'action' => $action, 'parameters' => $parameters, 'discloses' => array_values($discloses)]);
     }
 
+    /** @param array<string, string> $parameters */
+    public function capabilitySurface(string $capability, array $parameters, string $variant = 'normal'): self
+    {
+        if (! preg_match('/^[a-z][a-z0-9.-]{0,63}$/', $capability) || ! in_array($variant, ['normal', 'hero', 'map'], true)) {
+            throw new InvalidArgumentException('Capability surfaces require a valid capability and variant.');
+        }
+        foreach ($parameters as $name => $value) {
+            if (! is_string($name) || ! preg_match('/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/', $name) || ! is_string($value)) {
+                throw new InvalidArgumentException('Capability surface parameters must be named strings.');
+            }
+        }
+        return $this->node(array_filter(['type' => 'capability_surface', 'capability' => $capability, 'parameters' => $parameters, 'variant' => $variant === 'normal' ? null : $variant]));
+    }
+
 	public function attachment(Enclosure $enclosure, string $label, string $description = ''): self
 	{
 		$this->enclosures[$enclosure->digest] = $enclosure;

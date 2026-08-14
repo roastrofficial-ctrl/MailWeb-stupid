@@ -2,11 +2,11 @@
 
 const elements = Object.fromEntries(["address", "address-form", "back", "forward", "reload", "loading", "error", "viewport", "correspondence-stage", "travelling-envelope", "correspondence-status", "route-host", "route-mailbox", "postbox-open", "postbox-drawer", "postbox-items", "postbox-count", "stationery-items", "enclosure-items", "correspondence-view-open", "correspondence-view", "email-request", "email-response", "journey-view-open", "journey-view", "journey-history", "journey-summary", "journey-events", "journey-instant", "passport-open", "passport-view", "passport-status", "passport-remove", "client-action-view", "client-action-title", "client-action-service", "client-action-description", "client-action-disclosure", "client-action-form", "client-action-pin-label", "client-action-pin-input", "client-action-confirm-group", "client-action-form-error", "client-action-submit", "client-action-refuse", "site-tabs"].map((id) => [id, document.getElementById(id)]));
 // Deployment configuration only: execution is resolved by declared capability.
-const capabilityProviders = [{endpoint: `http://${location.hostname}:8792`, declaration: null}];
+const capabilityProviders = [8792, 8077].map(port => ({endpoint: `http://${location.hostname}:${port}`, declaration: null}));
 const capabilityProvider = capabilityProviders[0].endpoint;
 async function providerFor(capability) {
     for (const provider of capabilityProviders) {
-        if (!provider.declaration) { const response=await fetch(`${provider.endpoint}/service-info`); if (!response.ok) continue; provider.declaration=await response.json(); }
+        try { if (!provider.declaration) { const response=await fetch(`${provider.endpoint}/service-info`); if (!response.ok) continue; provider.declaration=await response.json(); } } catch { continue; }
         if (provider.declaration.capabilities?.includes(capability)) return provider;
     }
     throw new Error(`No local provider offers ${capability}`);
@@ -121,7 +121,7 @@ class JourneyInspector {
     }
     event(event, journey) {
         const item = document.createElement("li"), code = document.createElement("code"), body = document.createElement("div"), label = document.createElement("strong"), time = document.createElement("time");
-        const eventCodes = {navigation: "NAV", cache: "BOX", premail: "PRE", request: "REQ", transport: "SMTP", mailbox: "MAIL", response: "MW", template: "TPL", stationery: "BOX", enclosure: event.type.includes("hash") ? "HASH" : "ENC", document: "DOC", form: "FORM"}; code.textContent = eventCodes[event.type.split(".")[0]] || "EVENT"; label.textContent = event.label; time.textContent = formatTime(event.timestamp); body.append(label, time);
+        const eventCodes = {navigation: "NAV", cache: "BOX", premail: "PRE", request: "REQ", transport: "SMTP", mailbox: "MAIL", response: "MW", template: "TPL", stationery: "BOX", enclosure: event.type.includes("hash") ? "HASH" : "ENC", document: "DOC", form: "FORM", capability: "CAP", lucida: "SIGHT", draughtsman: "DRAW"}; code.textContent = eventCodes[event.type.split(".")[0]] || "EVENT"; label.textContent = event.label; time.textContent = formatTime(event.timestamp); body.append(label, time);
         if (event.metadata) { const meta = document.createElement("small"); meta.textContent = Object.entries(event.metadata).map(([key, value]) => `${key}=${value}`).join(" · "); body.appendChild(meta); }
         if (event.type === "request.created" && journey.request) body.appendChild(rawDetails("Actual MailWebRequest", journey.request));
         if (event.type === "response.received" && journey.response) body.appendChild(rawDetails("Actual MailWebResponse", journey.response));
@@ -226,7 +226,23 @@ function renderNode(node, currentURI) {
     case "nav": { const nav = document.createElement("nav"), label = document.createElement("span"), list = document.createElement("ul"); nav.className = "mailweb-nav"; nav.setAttribute("aria-label", node.label); label.className = "visually-hidden"; label.textContent = node.label; for (const item of node.items) { const li = document.createElement("li"), control = document.createElement("button"), destination = resolveReference(item.href); control.type = "button"; control.textContent = item.label; if (destination === currentURI) { control.className = "current"; control.setAttribute("aria-current", "page"); } control.addEventListener("click", () => void navigate({reference: item.href})); li.appendChild(control); list.appendChild(li); } nav.append(label, list); return nav; }
     case "form": { const form = document.createElement("form"); form.className = "mailweb-form"; for (const field of node.fields) { const group = document.createElement("label"); group.className = "form-field"; const label = document.createElement("span"); label.textContent = field.label; const input = document.createElement("input"); input.type = "text"; input.name = field.name; input.placeholder = field.placeholder || ""; input.required = Boolean(field.required); input.autocomplete = "off"; group.append(label, input); form.appendChild(group); } const submit = document.createElement("button"); submit.type = "submit"; submit.className = "document-button"; submit.textContent = node.submit; form.appendChild(submit); form.addEventListener("submit", (event) => { event.preventDefault(); const values = Object.create(null), data = new FormData(form); for (const field of node.fields) values[field.name] = String(data.get(field.name) || ""); void submitForm(node, values); }); return form; }
     case "client_action": { const card = document.createElement("section"), label = document.createElement("p"), button = document.createElement("button"); card.className = "attachment-card trusted-request"; label.textContent = `This correspondent requests the local capability: ${node.capability}`; button.type = "button"; button.className = "document-button prominent"; button.textContent = node.label; button.addEventListener("click", () => void openCapability(node)); card.append(label, button); return card; }
+    case "capability_surface": { const surface = document.createElement("section"); surface.className = `capability-surface ${node.variant || ""}`; surface.dataset.capability = node.capability; surface.textContent = `Requesting ${node.capability}…`; void mountCapabilitySurface(surface, node); return surface; }
     default: { const unsupported = document.createElement("p"); unsupported.textContent = "Unsupported document node."; return unsupported; }
+    }
+}
+
+async function mountCapabilitySurface(surface, node) {
+    try {
+        const provider = await providerFor(node.capability), moduleURL = provider.declaration.client_module;
+        if (!moduleURL) throw new Error(`Provider for ${node.capability} does not offer a client surface`);
+        const draughtsman = await import(new URL(moduleURL, provider.endpoint).href);
+        surface.replaceChildren();
+        await draughtsman.mount(surface, {provider: provider.endpoint, capability: node.capability, parameters: node.parameters || {}, emitEvent: (type, label, metadata={}) => {
+            const journey=currentState?.last_journey;if(!journey)return;journey.events.push({type,label,metadata,timestamp:new Date().toISOString()});
+        }});
+    } catch (error) {
+        surface.classList.add("unavailable");
+        surface.textContent = `SIGHT UNAVAILABLE · ${error instanceof Error ? error.message : String(error)}`;
     }
 }
 

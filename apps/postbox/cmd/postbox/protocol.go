@@ -70,23 +70,23 @@ type Presentation struct {
 }
 
 type Node struct {
-	Type        string      `json:"type"`
-	Level       int         `json:"level,omitempty"`
-	Text        string      `json:"text,omitempty"`
-	Label       string      `json:"label,omitempty"`
-	Href        string      `json:"href,omitempty"`
-	Src         string      `json:"src,omitempty"`
-	Alt         string      `json:"alt,omitempty"`
-	Method      string      `json:"method,omitempty"`
-	Action      string      `json:"action,omitempty"`
-	Fields      []FormField `json:"fields,omitempty"`
-	Submit      string      `json:"submit,omitempty"`
-	Variant     string      `json:"variant,omitempty"`
-	Name        string      `json:"name,omitempty"`
-	Items       []NavItem   `json:"items,omitempty"`
-	Enclosure   string      `json:"enclosure,omitempty"`
-	Digest      string      `json:"digest,omitempty"`
-	Description string      `json:"description,omitempty"`
+	Type        string            `json:"type"`
+	Level       int               `json:"level,omitempty"`
+	Text        string            `json:"text,omitempty"`
+	Label       string            `json:"label,omitempty"`
+	Href        string            `json:"href,omitempty"`
+	Src         string            `json:"src,omitempty"`
+	Alt         string            `json:"alt,omitempty"`
+	Method      string            `json:"method,omitempty"`
+	Action      string            `json:"action,omitempty"`
+	Fields      []FormField       `json:"fields,omitempty"`
+	Submit      string            `json:"submit,omitempty"`
+	Variant     string            `json:"variant,omitempty"`
+	Name        string            `json:"name,omitempty"`
+	Items       []NavItem         `json:"items,omitempty"`
+	Enclosure   string            `json:"enclosure,omitempty"`
+	Digest      string            `json:"digest,omitempty"`
+	Description string            `json:"description,omitempty"`
 	Capability  string            `json:"capability,omitempty"`
 	Parameters  map[string]string `json:"parameters,omitempty"`
 	Discloses   []string          `json:"discloses,omitempty"`
@@ -163,7 +163,12 @@ func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
 		}
 	}
 	for index, node := range response.Document.Body {
-		if node.Type == "client_action" && response.MailWeb != "0.6" { return errors.New("client actions require MailWeb 0.6") }
+		if node.Type == "client_action" && response.MailWeb != "0.6" {
+			return errors.New("client actions require MailWeb 0.6")
+		}
+		if node.Type == "capability_surface" && response.MailWeb != "0.6" {
+			return errors.New("capability surfaces require MailWeb 0.6")
+		}
 		if response.MailWeb == "0.1" && node.Type == "form" {
 			return fmt.Errorf("document body node %d: form requires MailWeb 0.2 or later", index)
 		}
@@ -392,7 +397,23 @@ func validateNode(node Node) error {
 		if node.Label == "" || !regexp.MustCompile(`^[a-z][a-z0-9.-]{0,63}$`).MatchString(node.Capability) || !safeMailWebReference(node.Action) || len(node.Parameters) > 32 || len(node.Discloses) > 32 {
 			return errors.New("client action requires a label, capability, safe action, and bounded public metadata")
 		}
-		for name := range node.Parameters { if !formFieldName.MatchString(name) { return errors.New("invalid client action parameter") } }
+		for name := range node.Parameters {
+			if !formFieldName.MatchString(name) {
+				return errors.New("invalid client action parameter")
+			}
+		}
+	case "capability_surface":
+		if !regexp.MustCompile(`^[a-z][a-z0-9.-]{0,63}$`).MatchString(node.Capability) || len(node.Parameters) > 32 {
+			return errors.New("capability surface requires a capability and bounded public metadata")
+		}
+		if node.Variant != "" && node.Variant != "hero" && node.Variant != "map" {
+			return errors.New("invalid capability surface variant")
+		}
+		for name := range node.Parameters {
+			if !formFieldName.MatchString(name) {
+				return errors.New("invalid capability surface parameter")
+			}
+		}
 	default:
 		return fmt.Errorf("unsupported type %q", node.Type)
 	}

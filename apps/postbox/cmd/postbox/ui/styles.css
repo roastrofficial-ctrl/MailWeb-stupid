@@ -160,6 +160,10 @@ dialog::backdrop { background: #101a147a; backdrop-filter: blur(3px); }
 .journey-events li[hidden] { display: grid !important; opacity: 0; transform: translateY(6px); }
 .journey-events li > code { color: #f2c14e; } .journey-events li div { display: grid; gap: 4px; } .journey-events time, .journey-events small { color: #809184; font: .68rem/1.4 "SFMono-Regular", Consolas, monospace; }
 .journey-events details { margin-top: 8px; } #journey-instant { padding: 8px 11px; border: 1px solid #506b58; color: #cbe0ce; background: transparent; }
+.capability-surface { position: relative; display: block; min-height: 240px; margin: 1.5rem 0; overflow: hidden; border: 1px solid color-mix(in srgb, var(--mw-accent) 45%, transparent); border-radius: var(--mw-radius); background: #091116; color: #d8e8da; }
+.capability-surface.hero { min-height: 360px; }
+.capability-surface.map { min-height: 440px; }
+.capability-surface.unavailable { display: grid; place-items: center; padding: 2rem; font: .75rem/1.5 "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; }
 .postbox-drawer { width: min(540px, 100%); height: 100%; max-height: none; margin: 0 0 0 auto; padding: 30px; border-left: 1px solid #718077; }
 .postbox-drawer header, .correspondence-view header { display: flex; align-items: flex-start; justify-content: space-between; }
 .postbox-drawer h2, .correspondence-view h2 { margin: .15em 0; font: 500 2.5rem/1 Georgia, serif; }
