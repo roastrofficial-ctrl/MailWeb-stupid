@@ -43,6 +43,7 @@ func RunWebUI(listenAddress string, session *BrowserSession) error {
 	mux.HandleFunc("POST /api/reload", server.reload)
 	mux.HandleFunc("GET /api/enclosures/{digest}", server.enclosure)
 	mux.HandleFunc("POST /api/client-action", server.clientAction)
+	mux.HandleFunc("GET /favicon.ico", func(writer http.ResponseWriter, _ *http.Request) { writer.WriteHeader(http.StatusNoContent) })
 	mux.Handle("GET /", http.FileServerFS(assets))
 
 	handler := securityHeaders(mux)
@@ -149,7 +150,7 @@ func writeState(writer http.ResponseWriter, state BrowserState, err error) {
 
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' http: https:; connect-src 'self' http://127.0.0.1:8792 http://localhost:8792; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+		writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' http://127.0.0.1:8077 http://localhost:8077; style-src 'self' http://127.0.0.1:8077 http://localhost:8077; img-src 'self' http: https:; connect-src 'self' http://127.0.0.1:8792 http://localhost:8792 http://127.0.0.1:8077 http://localhost:8077; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 		writer.Header().Set("Referrer-Policy", "no-referrer")
 		writer.Header().Set("X-Content-Type-Options", "nosniff")
 		writer.Header().Set("X-Frame-Options", "DENY")
