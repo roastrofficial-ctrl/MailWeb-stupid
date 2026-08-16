@@ -204,7 +204,9 @@ function renderPremailLetters(targets) {
 	for (const target of targets) { const chip = document.createElement("span"), uri = safeURL(target); chip.textContent = `letter → ${uri?.pathname || target}`; area.appendChild(chip); }
 }
 
+let scheduledRevisit = null;
 function renderDocument(current) {
+    if (scheduledRevisit) { clearTimeout(scheduledRevisit); scheduledRevisit = null; }
     const mailwebDocument = current.response.document || {title: "No enclosure", body: []}, currentURI = current.uri, delivery = current.delivery;
     elements.viewport.replaceChildren(); document.title = `${mailwebDocument.title} — Postbox`;
     const page = document.createElement("div"); page.className = "mailweb-document";
@@ -227,6 +229,7 @@ function renderNode(node, currentURI) {
     case "form": { const form = document.createElement("form"); form.className = "mailweb-form"; for (const field of node.fields) { const group = document.createElement("label"); group.className = "form-field"; const label = document.createElement("span"); label.textContent = field.label; const input = document.createElement("input"); input.type = "text"; input.name = field.name; input.placeholder = field.placeholder || ""; input.required = Boolean(field.required); input.autocomplete = "off"; group.append(label, input); form.appendChild(group); } const submit = document.createElement("button"); submit.type = "submit"; submit.className = "document-button"; submit.textContent = node.submit; form.appendChild(submit); form.addEventListener("submit", (event) => { event.preventDefault(); const values = Object.create(null), data = new FormData(form); for (const field of node.fields) values[field.name] = String(data.get(field.name) || ""); void submitForm(node, values); }); return form; }
     case "client_action": { const card = document.createElement("section"), label = document.createElement("p"), button = document.createElement("button"); card.className = "attachment-card trusted-request"; label.textContent = `This correspondent requests the local capability: ${node.capability}`; button.type = "button"; button.className = "document-button prominent"; button.textContent = node.label; button.addEventListener("click", () => void openCapability(node)); card.append(label, button); return card; }
     case "capability_surface": { const surface = document.createElement("section"); surface.className = `capability-surface ${node.variant || ""}`; surface.dataset.capability = node.capability; surface.textContent = `Requesting ${node.capability}…`; void mountCapabilitySurface(surface, node); return surface; }
+    case "revisit": { const status = document.createElement("p"), sourceRequest = currentState?.current?.request?.id; status.className = "rounds-status"; status.textContent = `HOST ATTENTION · next Round in ${node.after_ms} ms`; scheduledRevisit = setTimeout(() => { if (currentState?.current?.request?.id === sourceRequest) void navigate({reference: node.href}); }, node.after_ms); return status; }
     default: { const unsupported = document.createElement("p"); unsupported.textContent = "Unsupported document node."; return unsupported; }
     }
 }

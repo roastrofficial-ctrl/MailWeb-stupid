@@ -92,6 +92,14 @@ final class Page implements JsonSerializable
 		return $this->node(array_filter(['type' => 'button', 'label' => $label, 'href' => $href, 'variant' => $variant === 'normal' ? null : $variant]));
     }
 
+    public function revisit(string $href, int $afterMs = 750): self
+    {
+        if ($afterMs < 250 || $afterMs > 10000 || $href === '') {
+            throw new InvalidArgumentException('A revisit requires a safe cadence between 250 and 10000 milliseconds.');
+        }
+        return $this->node(['type' => 'revisit', 'href' => $href, 'after_ms' => $afterMs]);
+    }
+
     public function image(string|Enclosure $src, string $alt, string $variant = 'normal'): self
     {
 		if (! in_array($variant, ['normal', 'hero'], true)) { throw new InvalidArgumentException('Invalid image variant.'); }

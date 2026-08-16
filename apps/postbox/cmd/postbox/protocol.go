@@ -90,6 +90,7 @@ type Node struct {
 	Capability  string            `json:"capability,omitempty"`
 	Parameters  map[string]string `json:"parameters,omitempty"`
 	Discloses   []string          `json:"discloses,omitempty"`
+	AfterMS     int               `json:"after_ms,omitempty"`
 }
 
 type NavItem struct {
@@ -168,6 +169,9 @@ func ValidateResponse(request MailWebRequest, response MailWebResponse) error {
 		}
 		if node.Type == "capability_surface" && response.MailWeb != "0.6" {
 			return errors.New("capability surfaces require MailWeb 0.6")
+		}
+		if node.Type == "revisit" && response.MailWeb != "0.6" {
+			return errors.New("revisit cadence requires MailWeb 0.6")
 		}
 		if response.MailWeb == "0.1" && node.Type == "form" {
 			return fmt.Errorf("document body node %d: form requires MailWeb 0.2 or later", index)
@@ -315,6 +319,9 @@ func validTemplateVersion(value string) bool {
 }
 
 func validateNode(node Node) error {
+	if node.Type != "revisit" && node.AfterMS != 0 {
+		return errors.New("node contains revisit cadence from another type")
+	}
 	if node.Type != "image" && node.Type != "attachment" && (node.Enclosure != "" || node.Digest != "" || node.Description != "") {
 		return errors.New("node contains enclosure fields from another type")
 	}
@@ -345,6 +352,13 @@ func validateNode(node Node) error {
 		}
 		if node.Type == "button" && node.Variant != "" && node.Variant != "normal" && node.Variant != "prominent" {
 			return errors.New("invalid button variant")
+		}
+	case "revisit":
+		if !safeMailWebReference(node.Href) || node.AfterMS < 250 || node.AfterMS > 10000 {
+			return errors.New("revisit requires a safe MailWeb reference and bounded cadence")
+		}
+		if node.Level != 0 || node.Text != "" || node.Label != "" || node.Src != "" || node.Alt != "" || node.Variant != "" || hasFormMetadata(node) || hasTemplateMetadata(node) {
+			return errors.New("revisit contains fields from another node type")
 		}
 	case "image":
 		if (node.Enclosure == "") == (node.Src == "") || (node.Enclosure != "" && (!formFieldName.MatchString(node.Enclosure) || !validTemplateVersion(node.Digest))) {

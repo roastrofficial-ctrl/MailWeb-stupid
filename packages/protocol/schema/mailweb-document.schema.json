@@ -30,6 +30,7 @@
         { "$ref": "#/$defs/link" },
         { "$ref": "#/$defs/image" },
         { "$ref": "#/$defs/button" },
+        { "$ref": "#/$defs/revisit" },
         { "$ref": "#/$defs/form" },
         { "$ref": "#/$defs/nav" },
         { "$ref": "#/$defs/slot" },
@@ -40,7 +41,7 @@
     "contentNode": {
       "oneOf": [
         { "$ref": "#/$defs/heading" }, { "$ref": "#/$defs/paragraph" }, { "$ref": "#/$defs/link" },
-        { "$ref": "#/$defs/image" }, { "$ref": "#/$defs/button" }, { "$ref": "#/$defs/form" }, { "$ref": "#/$defs/nav" }, { "$ref": "#/$defs/attachment" }, { "$ref": "#/$defs/clientAction" }
+        { "$ref": "#/$defs/image" }, { "$ref": "#/$defs/button" }, { "$ref": "#/$defs/revisit" }, { "$ref": "#/$defs/form" }, { "$ref": "#/$defs/nav" }, { "$ref": "#/$defs/attachment" }, { "$ref": "#/$defs/clientAction" }
       ]
     },
     "navItem": { "type": "object", "additionalProperties": false, "required": ["label", "href"], "properties": { "label": { "type": "string", "minLength": 1 }, "href": { "type": "string", "format": "uri-reference", "minLength": 1 } } },
@@ -109,6 +110,16 @@
         "label": { "type": "string" },
         "href": { "type": "string", "format": "uri-reference", "minLength": 1 },
         "variant": { "enum": ["normal", "prominent"] }
+      }
+    },
+    "revisit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "href", "after_ms"],
+      "properties": {
+        "type": { "const": "revisit" },
+        "href": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "after_ms": { "type": "integer", "minimum": 250, "maximum": 10000 }
       }
     },
     "formField": {

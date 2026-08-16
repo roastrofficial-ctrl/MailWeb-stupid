@@ -28,7 +28,7 @@ $assert(in_array('mailweb:listen', $commands, true), 'Listener command was not r
 MailWeb::get('/package-test', fn (MailWebRequest $request) => MailWeb::page('Query')
     ->heading((string) $request->query('q'))
     ->paragraph((string) $request->header('x-letter'))
-    ->link('Link', '/next')->button('Button', '/next')->image('https://example.test/image.png', 'Image'));
+    ->link('Link', '/next')->button('Button', '/next')->revisit('/next', 750)->image('https://example.test/image.png', 'Image'));
 MailWeb::post('/package-test', fn (MailWebRequest $request) => MailWeb::page('Post')
     ->heading((string) $request->input('name'))
     ->form('POST', '/package-test', [MailWeb::text('name', 'Name', 'Your name', true)], 'Send'));
@@ -44,7 +44,8 @@ $get = $publisher->handle([
 $assert($get['request_id'] === '01J00000000000000000000000', 'Response correlation changed.');
 $assert($get['status'] === 200 && $get['document']['body'][0]['text'] === 'internet', 'GET routing/query failed.');
 $assert($get['document']['body'][1]['text'] === 'private', 'Case-insensitive headers failed.');
-$assert(array_column($get['document']['body'], 'type') === ['heading', 'paragraph', 'link', 'button', 'image'], 'Document nodes serialized incorrectly.');
+$assert(array_column($get['document']['body'], 'type') === ['heading', 'paragraph', 'link', 'button', 'revisit', 'image'], 'Document nodes serialized incorrectly.');
+$assert($get['document']['body'][4]['after_ms'] === 750, 'Revisit cadence was not serialized.');
 
 $post = $publisher->handle([
     'mailweb' => '0.3', 'id' => '01J00000000000000000000001', 'method' => 'POST',

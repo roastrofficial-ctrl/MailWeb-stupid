@@ -164,6 +164,7 @@ dialog::backdrop { background: #101a147a; backdrop-filter: blur(3px); }
 .capability-surface.hero { min-height: 360px; }
 .capability-surface.map { min-height: 440px; }
 .capability-surface.unavailable { display: grid; place-items: center; padding: 2rem; font: .75rem/1.5 "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; }
+.rounds-status { padding: .8rem 1rem; border-left: 3px solid var(--document-accent); background: var(--document-surface); font: .72rem/1.5 "SFMono-Regular", Consolas, monospace; letter-spacing: .06em; }
 .postbox-drawer { width: min(540px, 100%); height: 100%; max-height: none; margin: 0 0 0 auto; padding: 30px; border-left: 1px solid #718077; }
 .postbox-drawer header, .correspondence-view header { display: flex; align-items: flex-start; justify-content: space-between; }
 .postbox-drawer h2, .correspondence-view h2 { margin: .15em 0; font: 500 2.5rem/1 Georgia, serif; }
