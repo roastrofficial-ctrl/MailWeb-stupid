@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	transportName := flag.String("transport", envOr("MAILWEB_TRANSPORT", "http"), "transport to use: http or smtp")
+	transportName := flag.String("transport", envOr("MAILWEB_TRANSPORT", "http"), "transport to use: http, smtp, or file")
 	timeout := flag.Duration("timeout", 15*time.Second, "how long to wait for a transport response")
 	webUI := flag.Bool("ui", false, "host the graphical Postbox browser")
 	listen := flag.String("listen", "127.0.0.1:9847", "loopback address for the graphical UI")
@@ -36,6 +36,8 @@ func main() {
 			*timeout,
 			os.Stdout,
 		)
+	case "file":
+		transport = NewFileTransport(envOr("MAILWEB_FILE_ROOT", "/mailweb-ipc"), *timeout)
 	default:
 		fmt.Fprintf(os.Stderr, "postbox: unknown transport %q\n", *transportName)
 		os.Exit(2)

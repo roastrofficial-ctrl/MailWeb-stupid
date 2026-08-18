@@ -187,6 +187,15 @@ function updateState(state, backgroundOnly = false) {
     knownArchive = newArchive; currentState = state; postbox.render(state.archive || [], state.stationery || [], state.enclosures || []);
 	renderPremailLetters(state.premail?.targets || []);
     setText("client-mailbox", state.client_mailbox || "No mailbox — direct transport");
+    if (state.client_mailbox) {
+        setText("mailbox-explainer-eyebrow", "YOUR PRIVATE REPLY ADDRESS");
+        setText("mailbox-explainer-title", "The publisher writes back here.");
+        setText("mailbox-explainer-copy", "Postbox sends each request from this mailbox. The MailWeb-enabled application replies to the same address with your requested document enclosed. This is the actual SMTP address used by this browsing session—not decorative browser chrome.");
+    } else {
+        setText("mailbox-explainer-eyebrow", "DIRECT PORTER TRANSPORT");
+        setText("mailbox-explainer-title", "No client email address is required.");
+        setText("mailbox-explainer-copy", "This Postbox now lodges MailWeb correspondence with its local Porter instead of sending it through SMTP. Find Me’s Porter carries the reply back and Postbox correlates it by Package identity. “No mailbox” means there is no client email address in this journey—not that there is no private reply channel.");
+    }
     setText("premail-status", state.notice || state.premail?.message || "prEmail: idle.");
     if (backgroundOnly) return;
     elements.back.disabled = !state.can_go_back; elements.forward.disabled = !state.can_go_forward; elements.reload.disabled = !state.current;
